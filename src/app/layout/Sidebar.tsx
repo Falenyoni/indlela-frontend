@@ -15,7 +15,11 @@ const navItems = [
   { to: '/housekeeping', label: 'Housekeeping', icon: '🧹' },
   { to: '/transport', label: 'Transport', icon: '🚐' },
   { to: '/activities', label: 'Activities', icon: '🎟️' },
+  { to: '/suppliers', label: 'Suppliers', icon: '🏢' },
+  { to: '/agents', label: 'Agents', icon: '🤝' },
+  { to: '/locations', label: 'Locations', icon: '📍' },
   { to: '/billing', label: 'Billing', icon: '💳' },
+  { to: '/reporting', label: 'Reporting', icon: '📊' },
 ]
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>

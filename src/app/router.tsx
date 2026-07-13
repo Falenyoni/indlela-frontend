@@ -24,11 +24,23 @@ const TransportPage = lazy(() =>
 const ActivitiesPage = lazy(() =>
   import('@/features/activities/ActivitiesPage').then((m) => ({ default: m.ActivitiesPage })),
 )
+const SuppliersPage = lazy(() =>
+  import('@/features/suppliers/SuppliersPage').then((m) => ({ default: m.SuppliersPage })),
+)
+const LocationsPage = lazy(() =>
+  import('@/features/locations/LocationsPage').then((m) => ({ default: m.LocationsPage })),
+)
+const AgentsPage = lazy(() =>
+  import('@/features/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })),
+)
 const BillingPage = lazy(() =>
   import('@/features/billing/BillingPage').then((m) => ({ default: m.BillingPage })),
 )
 const SettingsPage = lazy(() =>
   import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+)
+const ReportingPage = lazy(() =>
+  import('@/features/reporting/ReportingPage').then((m) => ({ default: m.ReportingPage })),
 )
 const LoginPage = lazy(() =>
   import('@/features/auth/LoginPage').then((m) => ({ default: m.LoginPage })),
@@ -64,8 +76,12 @@ export const router = createBrowserRouter([
           { path: 'housekeeping', element: withSuspense(<HousekeepingPage />) },
           { path: 'transport', element: withSuspense(<TransportPage />) },
           { path: 'activities', element: withSuspense(<ActivitiesPage />) },
+          { path: 'suppliers', element: withSuspense(<SuppliersPage />) },
+          { path: 'locations', element: withSuspense(<LocationsPage />) },
+          { path: 'agents', element: withSuspense(<AgentsPage />) },
           { path: 'billing', element: withSuspense(<BillingPage />) },
           { path: 'settings', element: withSuspense(<SettingsPage />) },
+          { path: 'reporting', element: withSuspense(<ReportingPage />) },
         ],
       },
     ],
