@@ -104,7 +104,7 @@ export function ReportingPage() {
                 <div>
                   <span className="font-medium text-gray-900 dark:text-gray-100">{r.guestName}</span>
                   <span className="text-gray-400 mx-2">·</span>
-                  <span className="text-gray-500">{r.propertyName}</span>
+                  <span className="text-gray-500">{r.baseLocationName ?? r.reservationNumber}</span>
                 </div>
                 <span className="font-medium text-gray-900 dark:text-gray-100">R {r.totalAmount.toFixed(2)}</span>
               </div>
