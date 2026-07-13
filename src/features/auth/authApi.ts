@@ -1,14 +1,16 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+
 export interface LoginRequest {
   email: string
   password: string
 }
 
-export interface LoginResponse {
+export interface LoginApiResponse {
   userId: string
   fullName: string
   email: string
-  role: string
+  roles: string[]
+  permissions: string[]
   organizationId: string
   organizationName: string
   accessToken: string
@@ -16,7 +18,7 @@ export interface LoginResponse {
   expiresAt: string
 }
 
-export async function login(request: LoginRequest): Promise<LoginResponse> {
+export async function login(request: LoginRequest): Promise<LoginApiResponse> {
   const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -29,6 +31,7 @@ export async function login(request: LoginRequest): Promise<LoginResponse> {
 
   return response.json()
 }
+
 export interface RefreshRequest {
   userId: string
   token: string

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router'
 import { useAuth } from '@/shared/lib/auth/AuthContext'
-import { login as loginApi } from './authApi'
+import { login as loginApi, type LoginApiResponse } from './authApi'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -18,7 +18,7 @@ export function LoginPage() {
     setError(null)
     setIsSubmitting(true)
     try {
-      const response = await loginApi({ email, password })
+      const response: LoginApiResponse = await loginApi({ email, password })
       login(response)
       const from = (location.state as { from?: Location })?.from?.pathname ?? '/'
       navigate(from, { replace: true })

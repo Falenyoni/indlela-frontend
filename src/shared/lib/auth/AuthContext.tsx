@@ -4,7 +4,8 @@ export interface User {
   userId: string
   fullName: string
   email: string
-  role: string
+  roles: string[]
+  permissions: string[]
   organizationId: string
   organizationName: string
 }
@@ -48,6 +49,8 @@ export function clearStoredAuth() {
 interface AuthContextValue {
   user: User | null
   isAuthenticated: boolean
+  hasPermission: (permission: string) => boolean
+  hasAnyRole: (...roles: string[]) => boolean
   login: (response: LoginResponse) => void
   logout: () => void
 }
@@ -72,8 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearStoredAuth()
   }
 
+  function hasPermission(permission: string): boolean {
+    return user?.permissions.includes(permission) ?? false
+  }
+
+  function hasAnyRole(...roles: string[]): boolean {
+    return roles.some(r => user?.roles.includes(r) ?? false)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: user !== null, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: user !== null, hasPermission, hasAnyRole, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
