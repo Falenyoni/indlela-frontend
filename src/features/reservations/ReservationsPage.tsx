@@ -35,7 +35,7 @@ export function ReservationsPage() {
   const [addItemForm, setAddItemForm] = useState({ activityId: '', scheduledAt: '', participantCount: '1', notes: '' })
 
   const { data: reservations = [] } = useQuery({ queryKey: ['reservations', statusFilter], queryFn: () => getReservations(statusFilter || undefined) })
-  const { data: guests = [] } = useQuery({ queryKey: ['guests'], queryFn: getGuests, enabled: showCreate })
+  const { data: guests = [] } = useQuery({ queryKey: ['guests'], queryFn: () => getGuests(), enabled: showCreate })
   const { data: allProperties = [] } = useQuery({ queryKey: ['properties-all'], queryFn: () => getProperties(), enabled: showCreate })
   const { data: detail, refetch: refetchDetail } = useQuery({ queryKey: ['reservation', detailId], queryFn: () => getReservationById(detailId!), enabled: !!detailId })
   const { data: itinerary, refetch: refetchItinerary } = useQuery({ queryKey: ['itinerary', detailId], queryFn: () => getItinerary(detailId!), enabled: !!detailId })
@@ -158,7 +158,7 @@ export function ReservationsPage() {
             ].map(({ label, key, type }) => (
               <div key={key}>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-                <input type={type} value={(form as Record<string, unknown>)[key] as string ?? ''}
+                <input type={type} value={(form as unknown as Record<string, unknown>)[key] as string ?? ''}
                   onChange={e => setForm(f => ({ ...f, [key]: type === 'number' ? Number(e.target.value) : (e.target.value || null) }))}
                   className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
               </div>
