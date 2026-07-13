@@ -4,6 +4,7 @@ import {
   getReservations, createReservation, getReservationById,
   addLineItem, removeLineItem,
   quoteReservation, confirmReservation, startTrip, completeTrip, cancelReservation,
+  getConsultants,
   type BookingRow, type CreateBookingRequest, type AddLineItemRequest,
 } from './reservationsApi'
 import { getGuests } from '../guests/guestsApi'
@@ -12,6 +13,8 @@ import { getLocations } from '../locations/locationsApi'
 import { getActivities } from '../activities/activitiesApi'
 import { getPropertyTypes } from '../properties/propertiesApi'
 import { getTransferRoutes } from '../transport/transfersApi'
+import { useAuth } from '@/shared/lib/auth/AuthContext'
+import { Permissions } from '@/shared/lib/auth/permissions'
 
 const STATUSES = ['', 'Enquiry', 'Quoted', 'Confirmed', 'InProgress', 'Completed', 'Cancelled']
 
@@ -26,6 +29,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const PRODUCT_TYPES = ['Accommodation', 'Transfer', 'Activity', 'Other']
 const CURRENCIES = ['ZAR', 'USD', 'EUR', 'GBP', 'BWP', 'ZMW', 'KES', 'TZS']
+const BOOKING_SOURCES = ['WalkIn', 'Agent', 'Email', 'Web']
 
 const emptyForm: CreateBookingRequest = {
   guestId: '', guestName: '',
@@ -36,6 +40,7 @@ const emptyForm: CreateBookingRequest = {
   pax: 1, currency: 'ZAR', exchangeRate: 1,
   reservationistDiscountPercent: 0,
   notes: null,
+  bookingSource: 'WalkIn',
 }
 
 const emptyItem: AddLineItemRequest = {
@@ -63,10 +68,17 @@ function computeSellingRate(rack: number, agentPct: number, resPct: number) {
 
 export function ReservationsPage() {
   const qc = useQueryClient()
+  const { user, hasPermission } = useAuth()
+  const isSupervisorOrAbove = hasPermission(Permissions.Bookings.ViewAll)
+  const isConsultant = hasPermission(Permissions.Bookings.ViewOwn) && !isSupervisorOrAbove
+
   const [statusFilter, setStatusFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
-  const [form, setForm] = useState<CreateBookingRequest>(emptyForm)
+  const [form, setForm] = useState<CreateBookingRequest>({
+    ...emptyForm,
+    consultantName: isConsultant ? (user?.fullName ?? '') : '',
+  })
   const [itemForm, setItemForm] = useState<AddLineItemRequest>(emptyItem)
 
   const { data: bookings = [] } = useQuery({
@@ -114,6 +126,12 @@ export function ReservationsPage() {
     queryKey: ['transfer-routes'],
     queryFn: () => getTransferRoutes(),
     enabled: !!detailId,
+  })
+
+  const { data: consultants = [] } = useQuery({
+    queryKey: ['consultants'],
+    queryFn: getConsultants,
+    enabled: showCreate && isSupervisorOrAbove,
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['reservations'] })
@@ -245,9 +263,26 @@ export function ReservationsPage() {
             {/* Consultant */}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Consultant *</label>
-              <input value={form.consultantName} onChange={e => setForm(f => ({ ...f, consultantName: e.target.value }))}
-                placeholder="Name of reservationist / consultant"
-                className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
+              {isConsultant ? (
+                <input value={form.consultantName} readOnly
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed" />
+              ) : (
+                <select value={form.consultantName}
+                  onChange={e => setForm(f => ({ ...f, consultantName: e.target.value }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                  <option value="">Select consultant…</option>
+                  {consultants.map(c => <option key={c.id} value={c.fullName}>{c.fullName}</option>)}
+                </select>
+              )}
+            </div>
+
+            {/* Booking Source */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Booking Source</label>
+              <select value={form.bookingSource} onChange={e => setForm(f => ({ ...f, bookingSource: e.target.value }))}
+                className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                {BOOKING_SOURCES.map(s => <option key={s} value={s}>{s === 'WalkIn' ? 'Walk-in' : s}</option>)}
+              </select>
             </div>
 
             {/* Base Location */}

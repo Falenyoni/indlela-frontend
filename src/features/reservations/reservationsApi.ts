@@ -6,6 +6,7 @@ export interface BookingRow {
   guestId: string
   guestName: string
   agentName: string | null
+  consultantName: string
   baseLocationName: string | null
   travelStartDate: string
   travelEndDate: string
@@ -13,6 +14,7 @@ export interface BookingRow {
   currency: string
   totalAmount: number
   status: string
+  bookingSource: string
   createdAt: string
 }
 
@@ -76,6 +78,18 @@ export interface CreateBookingRequest {
   exchangeRate: number
   reservationistDiscountPercent: number
   notes: string | null
+  bookingSource: string
+}
+
+export interface ConsultantOption {
+  id: string
+  fullName: string
+}
+
+export async function getConsultants(): Promise<ConsultantOption[]> {
+  const res = await apiFetch('/api/consultants')
+  if (!res.ok) throw new Error('Failed to load consultants')
+  return res.json()
 }
 
 export interface AddLineItemRequest {
