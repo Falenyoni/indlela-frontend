@@ -16,7 +16,7 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 
 export function ReportingPage() {
   const { data: reservations = [] } = useQuery({ queryKey: ['reservations'], queryFn: () => getReservations() })
-  const { data: guests = [] } = useQuery({ queryKey: ['guests'], queryFn: getGuests })
+  const { data: guests = [] } = useQuery({ queryKey: ['guests'], queryFn: () => getGuests() })
   const { data: properties = [] } = useQuery({ queryKey: ['properties'], queryFn: () => getProperties() })
   const { data: activities = [] } = useQuery({ queryKey: ['activities'], queryFn: getActivities })
 
