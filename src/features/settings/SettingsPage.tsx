@@ -11,7 +11,7 @@ import {
   getVehicleModels, createVehicleModel, toggleVehicleModel,
   getVehicles, createVehicle, updateVehicle, toggleVehicle,
   getDrivers, createDriver, updateDriver, toggleDriver,
-  type VehicleTypeRow, type VehicleMakeRow, type VehicleModelRow,
+  type VehicleMakeRow, type VehicleModelRow,
   type VehicleRow, type VehiclePayload, type DriverRow, type DriverPayload,
 } from '../transport/transportApi'
 import { ActivitiesPage } from '../activities/ActivitiesPage'
