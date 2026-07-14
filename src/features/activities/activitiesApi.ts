@@ -6,6 +6,7 @@ export interface ActivityRow {
   description: string | null
   category: string
   pricePerPerson: number
+  childPricePerPerson: number | null
   durationMinutes: number
   maxParticipants: number | null
   isActive: boolean
@@ -31,8 +32,9 @@ export interface ItineraryResponse {
   items: ItineraryItemResponse[]
 }
 
-export async function getActivities(): Promise<ActivityRow[]> {
-  const res = await apiFetch('/api/activities')
+export async function getActivities(category?: string): Promise<ActivityRow[]> {
+  const qs = category ? `?category=${encodeURIComponent(category)}` : ''
+  const res = await apiFetch(`/api/activities${qs}`)
   if (!res.ok) throw new Error('Failed to load activities')
   return res.json()
 }

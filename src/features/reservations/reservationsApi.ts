@@ -26,7 +26,6 @@ export interface LineItemDto {
   quantity: number
   unit: string
   rackRate: number
-  agentDiscountPercent: number
   reservationistDiscountPercent: number
   sellingRate: number
   sellingTotal: number
@@ -38,6 +37,24 @@ export interface LineItemDto {
   childSellingTotal: number
   childCostRate: number
   childCostTotal: number
+  serviceDate: string | null
+  startTime: string | null
+  sessionName: string | null
+  meetingPoint: string | null
+  paymentHandling: string
+  notes: string | null
+}
+
+export interface PaymentDto {
+  id: string
+  amount: number
+  currency: string
+  paymentMethod: string
+  paidAt: string
+  reference: string | null
+  collectedByName: string
+  notes: string | null
+  createdAt: string
 }
 
 export interface BookingDetail {
@@ -57,10 +74,12 @@ export interface BookingDetail {
   exchangeRate: number
   reservationistDiscountPercent: number
   totalAmount: number
+  outstandingBalance: number
   status: string
   notes: string | null
   createdAt: string
   lineItems: LineItemDto[]
+  payments: PaymentDto[]
 }
 
 export interface CreateBookingRequest {
@@ -99,12 +118,27 @@ export interface AddLineItemRequest {
   quantity: number
   unit: string
   rackRate: number
-  agentDiscountPercent: number
   reservationistDiscountPercent: number
   costRate: number
   childQuantity: number
   childRackRate: number
   childCostRate: number
+  serviceDate: string | null
+  startTime: string | null
+  sessionName: string | null
+  meetingPoint: string | null
+  paymentHandling: string
+  notes: string | null
+}
+
+export interface RecordPaymentRequest {
+  bookingId: string
+  amount: number
+  currency: string
+  paymentMethod: string
+  paidAt: string
+  reference: string | null
+  notes: string | null
 }
 
 export async function getReservations(status?: string, guestId?: string): Promise<BookingRow[]> {
@@ -146,6 +180,18 @@ export async function addLineItem(bookingId: string, data: AddLineItemRequest): 
 export async function removeLineItem(bookingId: string, itemId: string): Promise<void> {
   const res = await apiFetch(`/api/reservations/${bookingId}/line-items/${itemId}/remove`, { method: 'POST' })
   if (!res.ok) throw new Error('Failed to remove line item')
+}
+
+export async function recordPayment(bookingId: string, data: RecordPaymentRequest): Promise<{ id: string }> {
+  const res = await apiFetch(`/api/reservations/${bookingId}/payments`, {
+    method: 'POST',
+    body: JSON.stringify({ ...data, bookingId }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.message ?? 'Failed to record payment')
+  }
+  return res.json()
 }
 
 export async function quoteReservation(id: string): Promise<void> {

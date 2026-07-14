@@ -5,6 +5,20 @@ import {
   getRoles, createRole, updateRole, getPermissions,
   type UserRow, type RoleRow,
 } from './settingsApi'
+import {
+  getVehicleTypes, createVehicleType, toggleVehicleType,
+  getVehicleMakes, createVehicleMake, toggleVehicleMake,
+  getVehicleModels, createVehicleModel, toggleVehicleModel,
+  getVehicles, createVehicle, updateVehicle, toggleVehicle,
+  getDrivers, createDriver, updateDriver, toggleDriver,
+  type VehicleTypeRow, type VehicleMakeRow, type VehicleModelRow,
+  type VehicleRow, type VehiclePayload, type DriverRow, type DriverPayload,
+} from '../transport/transportApi'
+import { ActivitiesPage } from '../activities/ActivitiesPage'
+import { PropertiesPage } from '../properties/PropertiesPage'
+import { SuppliersPage } from '../suppliers/SuppliersPage'
+import { AgentsPage } from '../agents/AgentsPage'
+import { LocationsPage } from '../locations/LocationsPage'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -504,9 +518,491 @@ function RolesTab({ allPermissions }: { allPermissions: string[] }) {
   )
 }
 
+// ── Fleet Setup Tab ───────────────────────────────────────────────────────────
+
+function RefList({
+  title, items, isLoading, newName, onNewName, onAdd, onToggle, isPendingAdd, isPendingToggle, error,
+}: {
+  title: string
+  items: { id: string; name: string; isActive: boolean }[]
+  isLoading: boolean
+  newName: string
+  onNewName: (v: string) => void
+  onAdd: () => void
+  onToggle: (id: string) => void
+  isPendingAdd: boolean
+  isPendingToggle: boolean
+  error?: string
+  placeholder?: string
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+      <div className="flex gap-2">
+        <input value={newName} onChange={e => onNewName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && newName.trim() && onAdd()}
+          placeholder={`Add ${title.toLowerCase()}…`} className={inputCls} />
+        <button onClick={onAdd} disabled={isPendingAdd || !newName.trim()}
+          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0">
+          {isPendingAdd ? '…' : '+ Add'}
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-500">{error}</p>}
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+        {isLoading && <p className="px-4 py-6 text-sm text-center text-gray-400">Loading…</p>}
+        {!isLoading && items.length === 0 && <p className="px-4 py-6 text-sm text-center text-gray-400">No {title.toLowerCase()} yet</p>}
+        {items.map((item, i) => (
+          <div key={item.id} className={`flex items-center justify-between px-4 py-2.5 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''} ${!item.isActive ? 'opacity-50' : ''}`}>
+            <span className="text-sm text-gray-900 dark:text-gray-100">{item.name}</span>
+            <div className="flex items-center gap-3">
+              <span className={`px-1.5 py-0.5 rounded text-xs ${item.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                {item.isActive ? 'Active' : 'Inactive'}
+              </span>
+              <button onClick={() => onToggle(item.id)} disabled={isPendingToggle}
+                className={`text-xs hover:underline ${item.isActive ? 'text-red-500' : 'text-green-600'}`}>
+                {item.isActive ? 'Disable' : 'Enable'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FleetSetupTab() {
+  const qc = useQueryClient()
+  const [selectedMake, setSelectedMake] = useState<VehicleMakeRow | null>(null)
+  const [newTypeName, setNewTypeName] = useState('')
+  const [newMakeName, setNewMakeName] = useState('')
+  const [newModelName, setNewModelName] = useState('')
+
+  const { data: types = [], isLoading: typesLoading } = useQuery({
+    queryKey: ['vehicle-types'],
+    queryFn: () => getVehicleTypes(),
+  })
+
+  const { data: makes = [], isLoading: makesLoading } = useQuery({
+    queryKey: ['vehicle-makes'],
+    queryFn: () => getVehicleMakes(),
+  })
+
+  const { data: models = [], isLoading: modelsLoading } = useQuery({
+    queryKey: ['vehicle-models', selectedMake?.id],
+    queryFn: () => getVehicleModels(selectedMake!.id),
+    enabled: !!selectedMake,
+  })
+
+  const addType = useMutation({
+    mutationFn: () => createVehicleType(newTypeName.trim()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicle-types'] }); setNewTypeName('') },
+  })
+
+  const toggleType = useMutation({
+    mutationFn: (id: string) => toggleVehicleType(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-types'] }),
+  })
+
+  const addMake = useMutation({
+    mutationFn: () => createVehicleMake(newMakeName.trim()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicle-makes'] }); setNewMakeName('') },
+  })
+
+  const toggleMake = useMutation({
+    mutationFn: (id: string) => toggleVehicleMake(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-makes'] }),
+  })
+
+  const addModel = useMutation({
+    mutationFn: () => createVehicleModel(selectedMake!.id, newModelName.trim()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicle-models', selectedMake?.id] }); setNewModelName('') },
+  })
+
+  const toggleModel = useMutation({
+    mutationFn: (id: string) => toggleVehicleModel(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-models', selectedMake?.id] }),
+  })
+
+  return (
+    <div className="space-y-8">
+      {/* Vehicle Types — full width */}
+      <RefList
+        title="Vehicle Types"
+        items={types}
+        isLoading={typesLoading}
+        newName={newTypeName}
+        onNewName={setNewTypeName}
+        onAdd={() => addType.mutate()}
+        onToggle={id => toggleType.mutate(id)}
+        isPendingAdd={addType.isPending}
+        isPendingToggle={toggleType.isPending}
+        error={addType.isError ? String(addType.error) : undefined}
+      />
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Makes — clickable to filter models */}
+      <div className="space-y-3">
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Vehicle Makes</h3>
+        <div className="flex gap-2">
+          <input value={newMakeName} onChange={e => setNewMakeName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && newMakeName.trim() && addMake.mutate()}
+            placeholder="Add make…" className={inputCls} />
+          <button onClick={() => addMake.mutate()} disabled={addMake.isPending || !newMakeName.trim()}
+            className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0">
+            {addMake.isPending ? '…' : '+ Add'}
+          </button>
+        </div>
+        {addMake.isError && <p className="text-xs text-red-500">{String(addMake.error)}</p>}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+          {makesLoading && <p className="px-4 py-6 text-sm text-center text-gray-400">Loading…</p>}
+          {!makesLoading && makes.length === 0 && <p className="px-4 py-6 text-sm text-center text-gray-400">No makes yet</p>}
+          {makes.map((m, i) => (
+            <div key={m.id} onClick={() => setSelectedMake(selectedMake?.id === m.id ? null : m)}
+              className={`flex items-center justify-between px-4 py-2.5 cursor-pointer
+                ${i > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}
+                ${selectedMake?.id === m.id ? 'bg-blue-50 dark:bg-blue-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}
+                ${!m.isActive ? 'opacity-50' : ''}`}>
+              <span className={`text-sm font-medium ${selectedMake?.id === m.id ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-gray-100'}`}>
+                {m.name}
+              </span>
+              <div className="flex items-center gap-3">
+                <span className={`px-1.5 py-0.5 rounded text-xs ${m.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                  {m.isActive ? 'Active' : 'Inactive'}
+                </span>
+                <button onClick={e => { e.stopPropagation(); toggleMake.mutate(m.id) }} disabled={toggleMake.isPending}
+                  className={`text-xs hover:underline ${m.isActive ? 'text-red-500' : 'text-green-600'}`}>
+                  {m.isActive ? 'Disable' : 'Enable'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        {selectedMake && <p className="text-xs text-blue-600 dark:text-blue-400">Showing models for <strong>{selectedMake.name}</strong> →</p>}
+      </div>
+
+      {/* Models */}
+      <div className="space-y-3">
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+          Models{selectedMake
+            ? <span className="text-gray-400 font-normal"> — {selectedMake.name}</span>
+            : <span className="text-gray-400 font-normal text-sm"> (select a make)</span>}
+        </h3>
+        {selectedMake ? (
+          <>
+            <div className="flex gap-2">
+              <input value={newModelName} onChange={e => setNewModelName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && newModelName.trim() && addModel.mutate()}
+                placeholder="Add model…" className={inputCls} />
+              <button onClick={() => addModel.mutate()} disabled={addModel.isPending || !newModelName.trim()}
+                className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0">
+                {addModel.isPending ? '…' : '+ Add'}
+              </button>
+            </div>
+            {addModel.isError && <p className="text-xs text-red-500">{String(addModel.error)}</p>}
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              {modelsLoading && <p className="px-4 py-6 text-sm text-center text-gray-400">Loading…</p>}
+              {!modelsLoading && models.length === 0 && <p className="px-4 py-6 text-sm text-center text-gray-400">No models for {selectedMake.name} yet</p>}
+              {models.map((m: VehicleModelRow, i: number) => (
+                <div key={m.id} className={`flex items-center justify-between px-4 py-2.5 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''} ${!m.isActive ? 'opacity-50' : ''}`}>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">{m.name}</span>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-1.5 py-0.5 rounded text-xs ${m.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                      {m.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                    <button onClick={() => toggleModel.mutate(m.id)} disabled={toggleModel.isPending}
+                      className={`text-xs hover:underline ${m.isActive ? 'text-red-500' : 'text-green-600'}`}>
+                      {m.isActive ? 'Disable' : 'Enable'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 px-4 py-10 text-center text-sm text-gray-400">
+            Click a make on the left to manage its models
+          </div>
+        )}
+      </div>
+    </div>
+    </div>
+  )
+}
+
+// ── Fleet Tab ─────────────────────────────────────────────────────────────────
+
+const emptyVehicle: VehiclePayload = { registration: '', make: '', model: '', vehicleType: '', capacity: 1 }
+
+function FleetTab() {
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<VehicleRow | null>(null)
+  const [form, setForm] = useState<VehiclePayload>(emptyVehicle)
+  const [selectedMakeId, setSelectedMakeId] = useState('')
+
+  const { data: vehicles = [], isLoading } = useQuery({ queryKey: ['vehicles', search], queryFn: () => getVehicles(search || undefined) })
+  const { data: vehicleTypes = [] } = useQuery({ queryKey: ['vehicle-types'], queryFn: () => getVehicleTypes(true), enabled: showForm })
+  const { data: makes = [] } = useQuery({ queryKey: ['vehicle-makes'], queryFn: () => getVehicleMakes(true), enabled: showForm })
+  const { data: models = [] } = useQuery({ queryKey: ['vehicle-models', selectedMakeId], queryFn: () => getVehicleModels(selectedMakeId, true), enabled: showForm && !!selectedMakeId })
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['vehicles'] })
+  const save = useMutation({
+    mutationFn: () => editing ? updateVehicle(editing.id, form) : createVehicle(form).then(() => undefined),
+    onSuccess: () => { invalidate(); closeForm() },
+  })
+  const toggle = useMutation({ mutationFn: (id: string) => toggleVehicle(id), onSuccess: invalidate })
+
+  const openCreate = () => { setEditing(null); setForm(emptyVehicle); setSelectedMakeId(''); setShowForm(true) }
+  const openEdit = (v: VehicleRow) => {
+    setEditing(v)
+    setForm({ registration: v.registration, make: v.make, model: v.model, vehicleType: v.vehicleType, capacity: v.capacity })
+    setSelectedMakeId(makes.find(m => m.name === v.make)?.id ?? '')
+    setShowForm(true)
+  }
+  const closeForm = () => { setShowForm(false); setEditing(null); setForm(emptyVehicle); setSelectedMakeId('') }
+  const isValid = form.registration.trim() && form.make.trim() && form.model.trim() && form.vehicleType && form.capacity > 0
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <input placeholder="Search fleet…" value={search} onChange={e => setSearch(e.target.value)} className={`${inputCls} max-w-sm`} />
+        <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shrink-0">+ Add Vehicle</button>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+            <tr>{['Registration', 'Make / Model', 'Type', 'Capacity', 'Status', ''].map(h =>
+              <th key={h} className="text-left px-4 py-3 font-medium whitespace-nowrap">{h}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {isLoading && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Loading…</td></tr>}
+            {!isLoading && vehicles.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">No vehicles yet</td></tr>}
+            {vehicles.map(v => (
+              <tr key={v.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${!v.isActive ? 'opacity-50' : ''}`}>
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">{v.registration}</td>
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{v.make} {v.model}</td>
+                <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">{v.vehicleType}</span></td>
+                <td className="px-4 py-3 text-gray-500">{v.capacity} pax</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${v.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500'}`}>
+                    {v.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex gap-3 justify-end">
+                    <button onClick={() => openEdit(v)} className="text-xs text-blue-600 hover:underline">Edit</button>
+                    <button onClick={() => toggle.mutate(v.id)} disabled={toggle.isPending}
+                      className={`text-xs hover:underline ${v.isActive ? 'text-red-500' : 'text-green-600'}`}>
+                      {v.isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-400">{vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''}</div>
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editing ? 'Edit Vehicle' : 'Add Vehicle'}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className={labelCls}>Registration *</label>
+                <input value={form.registration} onChange={e => setForm(f => ({ ...f, registration: e.target.value.toUpperCase() }))} placeholder="e.g. ZW 123 ABC" className={inputCls} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Make *</label>
+                  {makes.length > 0 ? (
+                    <select value={selectedMakeId} onChange={e => { const m = makes.find(x => x.id === e.target.value); setSelectedMakeId(e.target.value); setForm(f => ({ ...f, make: m?.name ?? '', model: '' })) }} className={inputCls}>
+                      <option value="">Select make…</option>
+                      {makes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.make} onChange={e => setForm(f => ({ ...f, make: e.target.value }))} placeholder="Add makes in Fleet Setup" className={inputCls} />
+                  )}
+                </div>
+                <div>
+                  <label className={labelCls}>Model *</label>
+                  {selectedMakeId && models.length > 0 ? (
+                    <select value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))} className={inputCls}>
+                      <option value="">Select model…</option>
+                      {models.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))} placeholder={selectedMakeId ? 'No models yet' : 'Select a make first'} className={inputCls} />
+                  )}
+                </div>
+                <div>
+                  <label className={labelCls}>Vehicle Type *</label>
+                  <select value={form.vehicleType} onChange={e => setForm(f => ({ ...f, vehicleType: e.target.value }))} className={inputCls}>
+                    <option value="">Select…</option>
+                    {vehicleTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    {vehicleTypes.length === 0 && <option disabled>Add types in Fleet Setup</option>}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Capacity (pax) *</label>
+                  <input type="number" min={1} value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: Number(e.target.value) }))} className={inputCls} />
+                </div>
+              </div>
+            </div>
+            {save.isError && <p className="text-sm text-red-500">{String(save.error)}</p>}
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => save.mutate()} disabled={save.isPending || !isValid}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {save.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Add Vehicle'}
+              </button>
+              <button onClick={closeForm} className="flex-1 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Drivers Tab ───────────────────────────────────────────────────────────────
+
+const emptyDriver: DriverPayload = { fullName: '', licenseNumber: '', phone: null }
+
+function DriversTab() {
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<DriverRow | null>(null)
+  const [form, setForm] = useState<DriverPayload>(emptyDriver)
+
+  const { data: drivers = [], isLoading } = useQuery({ queryKey: ['drivers', search], queryFn: () => getDrivers(search || undefined) })
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['drivers'] })
+  const save = useMutation({
+    mutationFn: () => editing ? updateDriver(editing.id, form) : createDriver(form).then(() => undefined),
+    onSuccess: () => { invalidate(); closeForm() },
+  })
+  const toggle = useMutation({ mutationFn: (id: string) => toggleDriver(id), onSuccess: invalidate })
+
+  const openCreate = () => { setEditing(null); setForm(emptyDriver); setShowForm(true) }
+  const openEdit = (d: DriverRow) => { setEditing(d); setForm({ fullName: d.fullName, licenseNumber: d.licenseNumber, phone: d.phone }); setShowForm(true) }
+  const closeForm = () => { setShowForm(false); setEditing(null); setForm(emptyDriver) }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <input placeholder="Search drivers…" value={search} onChange={e => setSearch(e.target.value)} className={`${inputCls} max-w-sm`} />
+        <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shrink-0">+ Add Driver</button>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+            <tr>{['Name', 'License', 'Phone', 'Status', ''].map(h =>
+              <th key={h} className="text-left px-4 py-3 font-medium whitespace-nowrap">{h}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {isLoading && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">Loading…</td></tr>}
+            {!isLoading && drivers.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">No drivers yet</td></tr>}
+            {drivers.map(d => (
+              <tr key={d.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${!d.isActive ? 'opacity-50' : ''}`}>
+                <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{d.fullName}</td>
+                <td className="px-4 py-3 font-mono text-xs text-gray-500">{d.licenseNumber}</td>
+                <td className="px-4 py-3 text-gray-500">{d.phone ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${d.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500'}`}>
+                    {d.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex gap-3 justify-end">
+                    <button onClick={() => openEdit(d)} className="text-xs text-blue-600 hover:underline">Edit</button>
+                    <button onClick={() => toggle.mutate(d.id)} disabled={toggle.isPending}
+                      className={`text-xs hover:underline ${d.isActive ? 'text-red-500' : 'text-green-600'}`}>
+                      {d.isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-400">{drivers.length} driver{drivers.length !== 1 ? 's' : ''}</div>
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editing ? 'Edit Driver' : 'Add Driver'}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className={labelCls}>Full Name *</label>
+                <input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} placeholder="e.g. Tendai Moyo" className={inputCls} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>License Number *</label>
+                  <input value={form.licenseNumber} onChange={e => setForm(f => ({ ...f, licenseNumber: e.target.value }))} placeholder="e.g. 18-123456" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Phone</label>
+                  <input type="tel" value={form.phone ?? ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value || null }))} placeholder="+263 77 000 0000" className={inputCls} />
+                </div>
+              </div>
+            </div>
+            {save.isError && <p className="text-sm text-red-500">{String(save.error)}</p>}
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => save.mutate()} disabled={save.isPending || !form.fullName.trim() || !form.licenseNumber.trim()}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {save.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Add Driver'}
+              </button>
+              <button onClick={closeForm} className="flex-1 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── SettingsPage ──────────────────────────────────────────────────────────────
 
-type Tab = 'users' | 'roles'
+type Tab =
+  | 'users' | 'roles'
+  | 'activities' | 'properties' | 'suppliers' | 'agents' | 'locations'
+  | 'fleet' | 'drivers' | 'fleet-setup'
+
+const TAB_GROUPS = [
+  {
+    label: 'Access',
+    tabs: [
+      { id: 'users',  label: 'Users' },
+      { id: 'roles',  label: 'Roles & Permissions' },
+    ],
+  },
+  {
+    label: 'Product Catalog',
+    tabs: [
+      { id: 'activities',  label: 'Activities' },
+      { id: 'properties',  label: 'Properties' },
+      { id: 'suppliers',   label: 'Suppliers' },
+      { id: 'agents',      label: 'Agents' },
+      { id: 'locations',   label: 'Locations' },
+    ],
+  },
+  {
+    label: 'Fleet',
+    tabs: [
+      { id: 'fleet',       label: 'Fleet' },
+      { id: 'drivers',     label: 'Drivers' },
+      { id: 'fleet-setup', label: 'Fleet Setup' },
+    ],
+  },
+] as const
 
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>('users')
@@ -515,7 +1011,7 @@ export function SettingsPage() {
   const { data: allPermissions = [] } = useQuery({ queryKey: ['permissions'], queryFn: getPermissions })
 
   const tabCls = (t: Tab) =>
-    `px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === t
+    `px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${tab === t
       ? 'bg-white dark:bg-gray-900 text-blue-600 shadow-sm border border-gray-200 dark:border-gray-800'
       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`
 
@@ -523,16 +1019,34 @@ export function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Settings</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Organisation users, roles, and access permissions</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Users, product catalog, fleet, and reference data</p>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
-        <button onClick={() => setTab('users')} className={tabCls('users')}>Users</button>
-        <button onClick={() => setTab('roles')} className={tabCls('roles')}>Roles & Permissions</button>
+      <div className="flex flex-wrap gap-3 bg-gray-100 dark:bg-gray-800 rounded-lg p-2">
+        {TAB_GROUPS.map(group => (
+          <div key={group.label} className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 px-1">{group.label}</span>
+            <div className="flex flex-wrap gap-1">
+              {group.tabs.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id as Tab)} className={tabCls(t.id as Tab)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {tab === 'users' && <UsersTab roles={roles} />}
-      {tab === 'roles' && <RolesTab allPermissions={allPermissions} />}
+      {tab === 'users'       && <UsersTab roles={roles} />}
+      {tab === 'roles'       && <RolesTab allPermissions={allPermissions} />}
+      {tab === 'activities'  && <ActivitiesPage />}
+      {tab === 'properties'  && <PropertiesPage />}
+      {tab === 'suppliers'   && <SuppliersPage />}
+      {tab === 'agents'      && <AgentsPage />}
+      {tab === 'locations'   && <LocationsPage />}
+      {tab === 'fleet'       && <FleetTab />}
+      {tab === 'drivers'     && <DriversTab />}
+      {tab === 'fleet-setup' && <FleetSetupTab />}
     </div>
   )
 }

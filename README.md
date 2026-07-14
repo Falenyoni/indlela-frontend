@@ -1,75 +1,142 @@
-# React + TypeScript + Vite
+# Indlela — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite + TypeScript frontend for the Indlela tour operator booking system.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+| Concern | Library |
+|---|---|
+| Framework | React 19 + Vite 8 |
+| Language | TypeScript 6 |
+| Routing | React Router 7 |
+| Server state | TanStack Query v5 |
+| Forms | React Hook Form + Zod |
+| Styles | Tailwind CSS v4 |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Getting started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The dev server proxies `/api` to the backend. Set the target in `vite.config.ts`:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```ts
+server: {
+  proxy: {
+    '/api': 'https://localhost:7001'
+  }
+}
+```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Build for production:
+
+```bash
+npm run build
+```
+
+---
+
+## Project structure
 
 ```
+src/
+├── app/
+│   ├── layout/
+│   │   └── Sidebar.tsx          # Permission-filtered nav, org name, user roles
+│   └── router.tsx               # All routes wrapped with PermissionGuard
+├── features/
+│   ├── auth/                    # LoginPage, authApi, token storage
+│   ├── reservations/            # ReservationsPage, reservationsApi, discountRequestsApi
+│   ├── agents/                  # AgentsPage, agentsApi (includes rate sheets)
+│   ├── activities/              # ActivitiesPage, activitiesApi
+│   ├── transport/               # TransferRoutesPage, TransportPage, transfersApi, transportApi
+│   ├── guests/                  # GuestsPage, guestsApi
+│   ├── locations/               # LocationsPage, locationsApi
+│   ├── properties/              # PropertiesPage, propertiesApi
+│   ├── suppliers/               # SuppliersPage, suppliersApi
+│   ├── settings/                # SettingsPage (Users + Roles tabs), settingsApi
+│   └── reporting/               # ReportingPage
+└── shared/
+    └── lib/
+        ├── api/
+        │   └── apiFetch.ts          # Fetch wrapper — injects Bearer token, handles 401
+        └── auth/
+            ├── AuthContext.tsx      # useAuth() — user, hasPermission(), hasAnyRole()
+            ├── permissions.ts       # Typed permission key constants
+            └── PermissionGuard.tsx  # Redirects to / if permission missing
+```
+
+---
+
+## Auth
+
+After login, the JWT is stored in `localStorage`. `apiFetch` injects it on every request. On 401, the user is redirected to `/login`.
+
+```ts
+const { user, hasPermission, hasAnyRole } = useAuth()
+
+hasPermission(Permissions.Bookings.ViewAll)   // true/false
+hasAnyRole('Admin', 'Supervisor')              // true/false
+```
+
+Permission constants are in `src/shared/lib/auth/permissions.ts` — always use these, never raw strings.
+
+---
+
+## Route guards
+
+Every route in `router.tsx` is wrapped with `PermissionGuard`:
+
+```tsx
+// helper in router.tsx
+const guard = (perms: string[], el: JSX.Element) => (
+  <PermissionGuard anyPermission={perms}>{el}</PermissionGuard>
+)
+```
+
+The sidebar filters itself with the same permission check — users never see nav items they can't access.
+
+---
+
+## API conventions
+
+- All calls go through `apiFetch` in `src/shared/lib/api/apiFetch.ts`
+- Each feature has its own `*Api.ts` with typed async functions — no raw `fetch` in components
+- All mutations use `POST` (matching the backend convention)
+- Queries use TanStack Query with consistent `queryKey` arrays
+
+---
+
+## Line item product types
+
+When adding a line item to a booking the `productType` drives the product picker:
+
+| Type | Source endpoint |
+|---|---|
+| `Accommodation` | `GET /api/property-types` |
+| `Transfer` | `GET /api/transfer-routes` |
+| `Activity` | `GET /api/activities` (all non-ParkFee/Helicopter) |
+| `ParkFee` | `GET /api/activities?category=ParkFee` |
+| `Helicopter` | `GET /api/activities?category=Helicopter` |
+| `Other` | Free text, no product lookup |
+
+Selecting a product auto-fills `description`, `rackRate`, and `childRackRate`. Agent selling rates are applied server-side from the rate sheet — there is no `agentDiscountPercent` field on the form.
+
+---
+
+## Pending pages
+
+| Page | Status |
+|---|---|
+| Vehicle management | Not yet built |
+| Driver management | Not yet built |
+| Transfer requests dispatch board | Not yet built |
+| Agent rate sheet management (on Agents page) | Not yet built |
+| Discount request approval queue | Not yet built |
+| Activities — child price + ParkFee/Helicopter category options | Not yet built |

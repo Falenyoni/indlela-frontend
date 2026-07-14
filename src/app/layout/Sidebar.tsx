@@ -19,20 +19,16 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: '🏠', end: true },
   { to: '/guests',       label: 'Guests',       icon: '🧳', anyPermission: [Permissions.Bookings.ViewOwn, Permissions.Bookings.ViewAll] },
-  { to: '/reservations', label: 'Reservations', icon: '📅', anyPermission: [Permissions.Bookings.ViewOwn, Permissions.Bookings.ViewAll] },
+  { to: '/reservations',     label: 'Reservations',     icon: '📅', anyPermission: [Permissions.Bookings.ViewOwn, Permissions.Bookings.ViewAll] },
+  { to: '/discount-requests', label: 'Discounts',       icon: '🏷️', anyPermission: [Permissions.Discounts.Request, Permissions.Discounts.Approve] },
   { to: '/transport',    label: 'Transport',    icon: '🚐', anyPermission: [Permissions.Transfers.Assign, Permissions.Transfers.ViewOwn, Permissions.Fleet.View] },
-  { to: '/activities',   label: 'Activities',   icon: '🎟️', anyPermission: [Permissions.MasterData.View] },
-  { to: '/properties',   label: 'Properties',   icon: '🏨', anyPermission: [Permissions.MasterData.View] },
   { to: '/housekeeping', label: 'Housekeeping', icon: '🧹', anyPermission: [Permissions.MasterData.View] },
-  { to: '/suppliers',    label: 'Suppliers',    icon: '🏢', anyPermission: [Permissions.MasterData.View] },
-  { to: '/agents',       label: 'Agents',       icon: '🤝', anyPermission: [Permissions.MasterData.View] },
-  { to: '/locations',    label: 'Locations',    icon: '📍', anyPermission: [Permissions.MasterData.View] },
   { to: '/reporting',    label: 'Reporting',    icon: '📊', anyPermission: [Permissions.Reports.View] },
   { to: '/billing',      label: 'Billing',      icon: '💳', anyPermission: [Permissions.Settings.Users] },
 ]
 
 const settingsItem: NavItem = {
-  to: '/settings', label: 'Settings', icon: '⚙️', anyPermission: [Permissions.Settings.Users],
+  to: '/settings', label: 'Settings', icon: '⚙️', anyPermission: [Permissions.Settings.Users, Permissions.MasterData.View],
 }
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
