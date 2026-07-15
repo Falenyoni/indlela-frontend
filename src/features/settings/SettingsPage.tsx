@@ -1,9 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getUsers, createUser, updateUser, assignUserRoles,
   getRoles, createRole, updateRole, getPermissions,
-  updateBranding as updateBrandingApi,
+  getBranding, updateBranding as updateBrandingApi,
   type UserRow, type RoleRow,
 } from './settingsApi'
 import { useAuth } from '@/shared/lib/auth/AuthContext'
@@ -1062,14 +1062,26 @@ function BrandingTab() {
   const { user, updateBranding } = useAuth()
   const qc = useQueryClient()
 
+  const { data: branding } = useQuery({
+    queryKey: ['branding'],
+    queryFn: getBranding,
+  })
+
   const [primaryColor, setPrimaryColor] = useState(user?.primaryColor ?? '#3b82f6')
   const [logoPreview, setLogoPreview]   = useState<string | null>(user?.logoBase64 ?? null)
   const [logoBase64, setLogoBase64]     = useState<string | null>(null)
 
+  // Sync preview from API when auth context doesn't carry the logo (e.g. after re-login)
+  useEffect(() => {
+    if (branding?.logoBase64 && !logoPreview && !logoBase64) {
+      setLogoPreview(branding.logoBase64)
+    }
+  }, [branding?.logoBase64])
+
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 500_000) { alert('Logo must be under 500 KB'); return }
+    if (file.size > 2_000_000) { alert('Logo must be under 2 MB'); return }
     const reader = new FileReader()
     reader.onload = () => {
       const result = reader.result as string
@@ -1086,7 +1098,7 @@ function BrandingTab() {
       logoBase64: logoBase64 === '' ? null : (logoBase64 ?? undefined),
     }),
     onSuccess: () => {
-      const newLogo = logoBase64 === '' ? null : (logoBase64 ?? user?.logoBase64 ?? null)
+      const newLogo = logoBase64 === '' ? null : (logoBase64 ?? user?.logoBase64 ?? branding?.logoBase64 ?? null)
       updateBranding(primaryColor, newLogo)
       qc.invalidateQueries({ queryKey: ['branding'] })
     },
@@ -1104,25 +1116,33 @@ function BrandingTab() {
       {/* Logo */}
       <div className="space-y-3">
         <label className={labelCls}>Organisation Logo</label>
-        <div className="flex items-center gap-4">
-          <div className="w-32 h-16 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center bg-gray-50 dark:bg-gray-800 overflow-hidden">
+        <div className="flex items-center gap-6">
+          {/* Circular preview */}
+          <div className="shrink-0 flex flex-col items-center gap-2">
             {logoPreview
-              ? <img src={logoPreview} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
-              : <span className="text-xs text-gray-400">No logo</span>
+              ? <img src={logoPreview} alt="Logo" className="h-20 w-20 rounded-full object-cover ring-2 ring-gray-200 dark:ring-gray-700" />
+              : (
+                <div className="h-20 w-20 rounded-full border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center bg-gray-50 dark:bg-gray-800">
+                  <span className="text-xs text-gray-400 text-center px-2">No logo</span>
+                </div>
+              )
             }
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400 truncate max-w-[96px] text-center">
+              {user?.organizationName}
+            </span>
           </div>
           <div className="space-y-2">
-            <label className="cursor-pointer px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+            <label className="cursor-pointer inline-flex px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
               Upload logo
               <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={handleFile} className="sr-only" />
             </label>
             {logoPreview && (
               <button onClick={() => { setLogoPreview(null); setLogoBase64('') }}
                 className="block text-xs text-red-500 hover:underline">
-                Remove
+                Remove logo
               </button>
             )}
-            <p className="text-xs text-gray-400">PNG, SVG or JPEG · max 500 KB</p>
+            <p className="text-xs text-gray-400">PNG, SVG or JPEG · max 2 MB</p>
           </div>
         </div>
       </div>
@@ -1145,13 +1165,22 @@ function BrandingTab() {
 
       {/* Live preview */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800">Preview</div>
-        <div className="p-4 space-y-3 bg-white dark:bg-gray-900">
-          <div className="flex items-center gap-3">
+        <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800">Preview — Sidebar header</div>
+        <div className="p-4 space-y-4 bg-white dark:bg-gray-900">
+          {/* Sidebar header mockup */}
+          <div className="flex flex-col items-center gap-1.5 py-3 px-4 border border-gray-100 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-900">
             {logoPreview
-              ? <img src={logoPreview} alt="Logo preview" className="h-8 object-contain" />
-              : <span className="text-sm font-bold" style={{ color: primaryColor }}>{user?.organizationName}</span>
+              ? <img src={logoPreview} alt="Logo preview" className="h-12 w-12 rounded-full object-cover ring-2 ring-gray-200 dark:ring-gray-700" />
+              : (
+                <div className="h-12 w-12 rounded-full flex items-center justify-center text-white text-lg font-bold"
+                  style={{ background: primaryColor }}>
+                  {user?.organizationName?.[0]?.toUpperCase() ?? 'I'}
+                </div>
+              )
             }
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate text-center">
+              {user?.organizationName}
+            </span>
           </div>
           <div className="flex gap-2">
             <button className="px-3 py-1.5 rounded-lg text-sm font-medium text-white" style={{ background: primaryColor }}>

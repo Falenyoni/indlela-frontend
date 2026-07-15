@@ -2,10 +2,11 @@ import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getReservations, createReservation, getReservationById,
-  addLineItem, removeLineItem, recordPayment,
+  addLineItem, removeLineItem, recordPayment, updateLineItemDiscount,
+  getDiscountRequests, requestDiscount, reviewDiscountRequest,
   quoteReservation, confirmReservation, startTrip, completeTrip, cancelReservation,
   getConsultants,
-  type BookingRow, type CreateBookingRequest, type AddLineItemRequest, type RecordPaymentRequest,
+  type BookingRow, type CreateBookingRequest, type AddLineItemRequest, type RecordPaymentRequest, type DiscountRequestDto,
 } from './reservationsApi'
 import { getGuests } from '../guests/guestsApi'
 import { getAgents } from '../agents/agentsApi'
@@ -116,16 +117,16 @@ const emptyItem: AddLineItemRequest = {
   quantity: 1,
   unit: 'nights',
   rackRate: 0,
-  reservationistDiscountPercent: 0,
   costRate: 0,
   childQuantity: 0,
   childRackRate: 0,
   childCostRate: 0,
   compAdultQuantity: 0,
+  compAdultCostRate: 0,
   compChildQuantity: 0,
+  compChildCostRate: 0,
   serviceDate: null,
   startTime: null,
-  sessionName: null,
   meetingPoint: null,
   notes: null,
 }
@@ -176,6 +177,11 @@ export function ReservationsPage() {
   const [paymentForm, setPaymentForm] = useState<RecordPaymentRequest>(emptyPayment())
   const [showAddItem, setShowAddItem] = useState(false)
   const [showAddPayment, setShowAddPayment] = useState(false)
+  const [discountEdits, setDiscountEdits] = useState<Record<string, string>>({})
+  const [collapsedItems, setCollapsedItems] = useState<Set<string>>(new Set())
+  const [discountReqForm, setDiscountReqForm] = useState<{ itemId: string; percent: number; reason: string } | null>(null)
+  const canApproveDiscount = hasPermission(Permissions.Discounts.Approve)
+  const canRequestDiscount = hasPermission(Permissions.Discounts.Request)
 
   const { data: bookings = [] } = useQuery({
     queryKey: ['reservations', statusFilter],
@@ -197,7 +203,7 @@ export function ReservationsPage() {
   const { data: locations = [] } = useQuery({
     queryKey: ['locations'],
     queryFn: () => getLocations(),
-    enabled: showCreate,
+    enabled: showCreate || showAddItem,
   })
 
   const { data: detail, refetch: refetchDetail } = useQuery({
@@ -270,6 +276,37 @@ export function ReservationsPage() {
     mutationFn: (itemId: string) => removeLineItem(detailId!, itemId),
     onSuccess: () => { refetchDetail(); invalidate() },
   })
+
+  const saveDiscount = useMutation({
+    mutationFn: ({ itemId, pct }: { itemId: string; pct: number }) =>
+      updateLineItemDiscount(detailId!, itemId, pct),
+    onSuccess: () => { refetchDetail(); invalidate() },
+  })
+
+  const { data: discountRequests = [], refetch: refetchDiscountRequests } = useQuery({
+    queryKey: ['discount-requests', detailId],
+    queryFn: () => getDiscountRequests(detailId!),
+    enabled: !!detailId,
+  })
+
+  const submitDiscountReq = useMutation({
+    mutationFn: ({ itemId, percent, reason }: { itemId: string; percent: number; reason: string }) =>
+      requestDiscount(detailId!, itemId, percent, reason),
+    onSuccess: () => { setDiscountReqForm(null); refetchDiscountRequests() },
+  })
+
+  const reviewDiscount = useMutation({
+    mutationFn: ({ reqId, approved, note }: { reqId: string; approved: boolean; note?: string }) =>
+      reviewDiscountRequest(reqId, approved, note),
+    onSuccess: () => { refetchDetail(); refetchDiscountRequests(); invalidate() },
+  })
+
+  const pendingByItemId = Object.fromEntries(
+    discountRequests.filter(r => r.status === 'Pending' && r.lineItemId).map(r => [r.lineItemId!, r])
+  ) as Record<string, DiscountRequestDto>
+
+  const toggleCollapse = (itemId: string) =>
+    setCollapsedItems(s => { const n = new Set(s); n.has(itemId) ? n.delete(itemId) : n.add(itemId); return n })
 
   const addPayment = useMutation({
     mutationFn: () => recordPayment(detailId!, { ...paymentForm, bookingId: detailId! }),
@@ -582,18 +619,30 @@ export function ReservationsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="text-gray-500 bg-gray-50 dark:bg-gray-800">
-                      <tr>{['Type', 'Description / Schedule', 'Qty', 'Rack', 'Sell Rate', 'Sell Total', 'Cost', ''].map(h =>
+                      <tr>{['Type', 'Description / Schedule', 'Qty', 'Rack', 'Disc %', 'Sell Rate', 'Sell Total', 'Cost', ''].map(h =>
                         <th key={h} className="text-left px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {detail.lineItems.map(item => (
+                      {detail.lineItems.map(item => {
+                        const isCollapsed = collapsedItems.has(item.id)
+                        const hasChildren = item.childQuantity > 0 || item.compAdultQuantity > 0 || item.compChildQuantity > 0
+                        const pending = pendingByItemId[item.id]
+                        return (
                         <React.Fragment key={item.id}>
                           <tr className={detail.paymentHandling === 'GuestPaysDirect' ? 'opacity-60' : ''}>
                             <td className="px-3 py-2 whitespace-nowrap">
-                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${PT_COLORS[item.productType] ?? PT_COLORS.Other}`}>
-                                {ptLabel(item.productType)}
-                              </span>
+                              <div className="flex items-center gap-1">
+                                {hasChildren && (
+                                  <button onClick={() => toggleCollapse(item.id)}
+                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs leading-none w-4 shrink-0">
+                                    {isCollapsed ? '▶' : '▼'}
+                                  </button>
+                                )}
+                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${PT_COLORS[item.productType] ?? PT_COLORS.Other}`}>
+                                  {ptLabel(item.productType)}
+                                </span>
+                              </div>
                             </td>
                             <td className="px-3 py-2 max-w-[220px]">
                               <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{item.description}</div>
@@ -609,6 +658,35 @@ export function ReservationsPage() {
                             </td>
                             <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{item.quantity} {item.unit}</td>
                             <td className="px-3 py-2 text-gray-500">{item.rackRate.toFixed(2)}</td>
+                            <td className="px-3 py-2">
+                              {canApproveDiscount ? (
+                                <input
+                                  type="number" min={0} max={100} step={0.5}
+                                  value={discountEdits[item.id] ?? item.reservationistDiscountPercent.toFixed(1)}
+                                  onChange={e => setDiscountEdits(d => ({ ...d, [item.id]: e.target.value }))}
+                                  onBlur={e => {
+                                    const pct = parseFloat(e.target.value)
+                                    if (!isNaN(pct) && pct !== item.reservationistDiscountPercent) {
+                                      saveDiscount.mutate({ itemId: item.id, pct })
+                                    }
+                                    setDiscountEdits(d => { const n = { ...d }; delete n[item.id]; return n })
+                                  }}
+                                  className="w-14 text-xs border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                                />
+                              ) : pending ? (
+                                <span className="text-xs text-amber-500 whitespace-nowrap" title={`${pending.requestedDiscountPercent}% — awaiting approval`}>
+                                  ⏳ {pending.requestedDiscountPercent}%
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">{item.reservationistDiscountPercent.toFixed(1)}%</span>
+                                  {canRequestDiscount && (
+                                    <button onClick={() => setDiscountReqForm({ itemId: item.id, percent: item.reservationistDiscountPercent, reason: '' })}
+                                      className="text-xs text-blue-500 hover:underline ml-1">req</button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
                             <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{item.sellingRate.toFixed(2)}</td>
                             <td className="px-3 py-2 font-semibold text-gray-900 dark:text-gray-100">
                               {detail.paymentHandling === 'GuestPaysDirect'
@@ -621,7 +699,7 @@ export function ReservationsPage() {
                                 className="text-red-500 hover:underline disabled:opacity-40">✕</button>
                             </td>
                           </tr>
-                          {item.childQuantity > 0 && (
+                          {item.childQuantity > 0 && !isCollapsed && (
                             <tr className="bg-amber-50/50 dark:bg-amber-900/10">
                               <td className="px-3 py-1.5">
                                 <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Child</span>
@@ -629,12 +707,13 @@ export function ReservationsPage() {
                               <td className="px-3 py-1.5 text-gray-500 italic">{item.childQuantity} child{item.childQuantity !== 1 ? 'ren' : ''}</td>
                               <td className="px-3 py-1.5 text-gray-500">{item.childQuantity} {item.unit}</td>
                               <td className="px-3 py-1.5 text-gray-400">{item.childRackRate.toFixed(2)}</td>
+                              <td className="px-3 py-1.5 text-gray-400">—</td>
                               <td className="px-3 py-1.5 text-gray-500">{item.childSellingRate.toFixed(2)}</td>
                               <td className="px-3 py-1.5 font-medium text-gray-700 dark:text-gray-300">{item.childSellingTotal.toFixed(2)}</td>
                               <td className="px-3 py-1.5 text-gray-400">{item.childCostTotal.toFixed(2)}</td>
                             </tr>
                           )}
-                          {item.compAdultQuantity > 0 && (
+                          {item.compAdultQuantity > 0 && !isCollapsed && (
                             <tr className="bg-purple-50/50 dark:bg-purple-900/10">
                               <td className="px-3 py-1.5">
                                 <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">Comp Adult</span>
@@ -643,11 +722,12 @@ export function ReservationsPage() {
                               <td className="px-3 py-1.5 text-gray-500">{item.compAdultQuantity} {item.unit}</td>
                               <td className="px-3 py-1.5 text-gray-400">—</td>
                               <td className="px-3 py-1.5 text-gray-400">—</td>
-                              <td className="px-3 py-1.5 text-purple-600 dark:text-purple-400 font-medium">0.00</td>
-                              <td className="px-3 py-1.5 text-gray-400">0.00</td>
+                              <td className="px-3 py-1.5 text-gray-400">—</td>
+                              <td className="px-3 py-1.5 text-purple-600 dark:text-purple-400 font-medium">No charge</td>
+                              <td className="px-3 py-1.5 text-gray-400">{item.compAdultCostTotal > 0 ? item.compAdultCostTotal.toFixed(2) : '—'}</td>
                             </tr>
                           )}
-                          {item.compChildQuantity > 0 && (
+                          {item.compChildQuantity > 0 && !isCollapsed && (
                             <tr className="bg-purple-50/30 dark:bg-purple-900/5">
                               <td className="px-3 py-1.5">
                                 <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">Comp Child</span>
@@ -656,19 +736,21 @@ export function ReservationsPage() {
                               <td className="px-3 py-1.5 text-gray-500">{item.compChildQuantity} {item.unit}</td>
                               <td className="px-3 py-1.5 text-gray-400">—</td>
                               <td className="px-3 py-1.5 text-gray-400">—</td>
-                              <td className="px-3 py-1.5 text-purple-600 dark:text-purple-400 font-medium">0.00</td>
-                              <td className="px-3 py-1.5 text-gray-400">0.00</td>
+                              <td className="px-3 py-1.5 text-gray-400">—</td>
+                              <td className="px-3 py-1.5 text-purple-600 dark:text-purple-400 font-medium">No charge</td>
+                              <td className="px-3 py-1.5 text-gray-400">{item.compChildCostTotal > 0 ? item.compChildCostTotal.toFixed(2) : '—'}</td>
                             </tr>
                           )}
                         </React.Fragment>
-                      ))}
+                        )
+                      })}
                     </tbody>
                     <tfoot className="border-t-2 border-gray-200 dark:border-gray-700 text-sm">
                       <tr>
                         <td colSpan={5} className="px-3 pt-2 text-right text-gray-600 dark:text-gray-400">Invoice Total</td>
                         <td className="px-3 pt-2 font-bold text-gray-900 dark:text-gray-100">{fmtCurrency(detail.totalAmount, detail.currency)}</td>
                         <td className="px-3 pt-2 text-gray-400 text-xs">
-                          Cost: {detail.lineItems.reduce((s, i) => s + i.costTotal + i.childCostTotal, 0).toFixed(2)}
+                          Cost: {detail.lineItems.reduce((s, i) => s + i.costTotal + i.childCostTotal + i.compAdultCostTotal + i.compChildCostTotal, 0).toFixed(2)}
                         </td>
                         <td />
                       </tr>
@@ -680,6 +762,40 @@ export function ReservationsPage() {
               )}
 
             </div>
+
+            {/* ── DISCOUNT REQUESTS ── */}
+            {canApproveDiscount && discountRequests.filter(r => r.status === 'Pending').length > 0 && (
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-2">
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  Discount Requests
+                  <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                    {discountRequests.filter(r => r.status === 'Pending').length} pending
+                  </span>
+                </h4>
+                {discountRequests.filter(r => r.status === 'Pending').map(req => (
+                  <div key={req.id} className="flex items-start justify-between gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-sm">
+                    <div className="space-y-0.5">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                        {req.requestedDiscountPercent}% discount requested by {req.requestedByName}
+                      </p>
+                      <p className="text-xs text-gray-500 italic">{req.reason}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => reviewDiscount.mutate({ reqId: req.id, approved: true })}
+                        disabled={reviewDiscount.isPending}
+                        className="px-2 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                        Approve
+                      </button>
+                      <button onClick={() => reviewDiscount.mutate({ reqId: req.id, approved: false })}
+                        disabled={reviewDiscount.isPending}
+                        className="px-2 py-1 border border-red-300 text-red-600 rounded text-xs font-medium hover:bg-red-50 disabled:opacity-50">
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* ── PAYMENTS ── */}
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
@@ -739,6 +855,44 @@ export function ReservationsPage() {
         </div>
       )}
 
+      {/* ── REQUEST DISCOUNT MODAL ── */}
+      {discountReqForm && detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-4">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Request Discount</h3>
+            <div>
+              <label className={labelCls}>Discount %</label>
+              <input type="number" min={0} max={100} step={0.5}
+                value={discountReqForm.percent}
+                onChange={e => setDiscountReqForm(f => f && ({ ...f, percent: Number(e.target.value) }))}
+                className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Reason *</label>
+              <input value={discountReqForm.reason}
+                onChange={e => setDiscountReqForm(f => f && ({ ...f, reason: e.target.value }))}
+                placeholder="e.g. Repeat guest, agent request…"
+                className={inputCls} />
+            </div>
+            {submitDiscountReq.isError && (
+              <p className="text-xs text-red-500">{String(submitDiscountReq.error)}</p>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setDiscountReqForm(null)}
+                className="flex-1 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+                Cancel
+              </button>
+              <button
+                onClick={() => submitDiscountReq.mutate({ itemId: discountReqForm.itemId, percent: discountReqForm.percent, reason: discountReqForm.reason })}
+                disabled={submitDiscountReq.isPending || !discountReqForm.reason.trim() || discountReqForm.percent <= 0}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {submitDiscountReq.isPending ? 'Sending…' : 'Send for Approval'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── ADD ITEM MODAL ── */}
       {showAddItem && detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
@@ -757,7 +911,7 @@ export function ReservationsPage() {
                 <select value={itemForm.productType}
                   onChange={e => {
                     const t = e.target.value
-                    const defaultUnit = t === 'Accommodation' ? 'nights' : t === 'Transfer' ? 'trips' : 'pax'
+                    const defaultUnit = t === 'Accommodation' ? 'nights' : 'pax'
                     setItemForm(f => ({ ...f, productType: t, productId: null, description: '', rackRate: 0, childRackRate: 0, unit: defaultUnit }))
                   }}
                   className={inputCls}>
@@ -803,12 +957,12 @@ export function ReservationsPage() {
                   <select value={itemForm.productId ?? ''}
                     onChange={e => {
                       const a = transferActivities.find(x => x.id === e.target.value)
-                      setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, childRackRate: a?.childPricePerPerson ?? f.childRackRate, unit: 'trips' }))
+                      setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, childRackRate: a?.childPricePerPerson ?? f.childRackRate, unit: 'pax' }))
                     }}
                     className={inputCls}>
                     <option value="">Select transfer…</option>
                     {transferActivities.filter(a => a.isActive).map(a => (
-                      <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/trip</option>
+                      <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/pax</option>
                     ))}
                   </select>
                 </div>
@@ -852,40 +1006,38 @@ export function ReservationsPage() {
                   placeholder="e.g. Sunset Cruise — 3 adults" className={inputCls} />
               </div>
 
-              <div className="grid grid-cols-4 gap-2">
+              <div className={`grid gap-2 ${itemForm.productType === 'Other' ? 'grid-cols-4' : 'grid-cols-2'}`}>
                 <div><label className={labelCls}>Qty *</label>
                   <input type="number" min={0.01} step={0.01} value={itemForm.quantity}
                     onChange={e => setItemForm(f => ({ ...f, quantity: Number(e.target.value) }))} className={inputCls} /></div>
                 <div><label className={labelCls}>Unit</label>
                   <input list="units-list" value={itemForm.unit} onChange={e => setItemForm(f => ({ ...f, unit: e.target.value }))} className={inputCls} />
-                  <datalist id="units-list">{['nights', 'pax', 'trips', 'days', 'units'].map(u => <option key={u} value={u} />)}</datalist>
+                  <datalist id="units-list">{['nights', 'pax', 'days', 'units'].map(u => <option key={u} value={u} />)}</datalist>
                 </div>
-                <div><label className={labelCls}>Rack Rate *</label>
-                  <input type="number" min={0} step={0.01} value={itemForm.rackRate}
-                    onChange={e => setItemForm(f => ({ ...f, rackRate: Number(e.target.value) }))} className={inputCls} /></div>
-                <div><label className={labelCls}>Cost Rate</label>
-                  <input type="number" min={0} step={0.01} value={itemForm.costRate}
-                    onChange={e => setItemForm(f => ({ ...f, costRate: Number(e.target.value) }))} className={inputCls} /></div>
-              </div>
-
-              <div>
-                <label className={labelCls}>Res. Discount %</label>
-                <input type="number" min={0} max={100} step={0.5} value={itemForm.reservationistDiscountPercent}
-                  onChange={e => setItemForm(f => ({ ...f, reservationistDiscountPercent: Number(e.target.value) }))} className={inputCls} />
+                {itemForm.productType === 'Other' && (<>
+                  <div><label className={labelCls}>Rack Rate *</label>
+                    <input type="number" min={0} step={0.01} value={itemForm.rackRate}
+                      onChange={e => setItemForm(f => ({ ...f, rackRate: Number(e.target.value) }))} className={inputCls} /></div>
+                  <div><label className={labelCls}>Cost Rate</label>
+                    <input type="number" min={0} step={0.01} value={itemForm.costRate}
+                      onChange={e => setItemForm(f => ({ ...f, costRate: Number(e.target.value) }))} className={inputCls} /></div>
+                </>)}
               </div>
 
               <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
                 <p className="text-xs text-gray-500 mb-2 font-medium">Child Pax (optional)</p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className={`grid gap-2 ${itemForm.productType === 'Other' ? 'grid-cols-3' : 'grid-cols-1'}`}>
                   <div><label className={labelCls}>Child Qty</label>
                     <input type="number" min={0} value={itemForm.childQuantity}
                       onChange={e => setItemForm(f => ({ ...f, childQuantity: Number(e.target.value) }))} className={inputCls} /></div>
-                  <div><label className={labelCls}>Child Rack Rate</label>
-                    <input type="number" min={0} step={0.01} value={itemForm.childRackRate}
-                      onChange={e => setItemForm(f => ({ ...f, childRackRate: Number(e.target.value) }))} className={inputCls} /></div>
-                  <div><label className={labelCls}>Child Cost Rate</label>
-                    <input type="number" min={0} step={0.01} value={itemForm.childCostRate}
-                      onChange={e => setItemForm(f => ({ ...f, childCostRate: Number(e.target.value) }))} className={inputCls} /></div>
+                  {itemForm.productType === 'Other' && (<>
+                    <div><label className={labelCls}>Child Rack Rate</label>
+                      <input type="number" min={0} step={0.01} value={itemForm.childRackRate}
+                        onChange={e => setItemForm(f => ({ ...f, childRackRate: Number(e.target.value) }))} className={inputCls} /></div>
+                    <div><label className={labelCls}>Child Cost Rate</label>
+                      <input type="number" min={0} step={0.01} value={itemForm.childCostRate}
+                        onChange={e => setItemForm(f => ({ ...f, childCostRate: Number(e.target.value) }))} className={inputCls} /></div>
+                  </>)}
                 </div>
               </div>
 
@@ -895,9 +1047,15 @@ export function ReservationsPage() {
                   <div><label className={labelCls}>Comp Adults</label>
                     <input type="number" min={0} value={itemForm.compAdultQuantity}
                       onChange={e => setItemForm(f => ({ ...f, compAdultQuantity: Number(e.target.value) }))} className={inputCls} /></div>
+                  <div><label className={labelCls}>Comp Adult Cost Rate</label>
+                    <input type="number" min={0} step={0.01} value={itemForm.compAdultCostRate}
+                      onChange={e => setItemForm(f => ({ ...f, compAdultCostRate: Number(e.target.value) }))} className={inputCls} /></div>
                   <div><label className={labelCls}>Comp Children</label>
                     <input type="number" min={0} value={itemForm.compChildQuantity}
                       onChange={e => setItemForm(f => ({ ...f, compChildQuantity: Number(e.target.value) }))} className={inputCls} /></div>
+                  <div><label className={labelCls}>Comp Child Cost Rate</label>
+                    <input type="number" min={0} step={0.01} value={itemForm.compChildCostRate}
+                      onChange={e => setItemForm(f => ({ ...f, compChildCostRate: Number(e.target.value) }))} className={inputCls} /></div>
                 </div>
               </div>
 
@@ -911,12 +1069,16 @@ export function ReservationsPage() {
                     <div><label className={labelCls}>Start Time</label>
                       <input type="time" value={itemForm.startTime ?? ''}
                         onChange={e => setItemForm(f => ({ ...f, startTime: e.target.value || null }))} className={inputCls} /></div>
-                    <div><label className={labelCls}>Session Name</label>
-                      <input value={itemForm.sessionName ?? ''} placeholder="e.g. Morning, Sunset"
-                        onChange={e => setItemForm(f => ({ ...f, sessionName: e.target.value || null }))} className={inputCls} /></div>
                     <div><label className={labelCls}>Meeting Point</label>
-                      <input value={itemForm.meetingPoint ?? ''} placeholder="e.g. Hotel lobby"
-                        onChange={e => setItemForm(f => ({ ...f, meetingPoint: e.target.value || null }))} className={inputCls} /></div>
+                      <select value={itemForm.meetingPoint ?? ''}
+                        onChange={e => setItemForm(f => ({ ...f, meetingPoint: e.target.value || null }))}
+                        className={inputCls}>
+                        <option value="">None</option>
+                        {locations.filter(l => l.isActive).map(l => (
+                          <option key={l.id} value={l.name}>{l.name} ({l.type})</option>
+                        ))}
+                      </select>
+                    </div>
                   </>)}
                 </div>
                 <div className="mt-2">
@@ -939,11 +1101,22 @@ export function ReservationsPage() {
                       <span>→ Total <strong className="text-green-600">{childTotalPreview.toFixed(2)}</strong></span>
                     </div>
                   </>)}
-                  {(itemForm.compAdultQuantity > 0 || itemForm.compChildQuantity > 0) && (<>
+                  {(itemForm.compAdultQuantity > 0 || itemForm.compChildQuantity > 0) && (
                     <div className="flex items-center gap-3 flex-wrap text-purple-600 dark:text-purple-400">
-                      <span>Comp: {itemForm.compAdultQuantity > 0 ? `${itemForm.compAdultQuantity} adult${itemForm.compAdultQuantity !== 1 ? 's' : ''}` : ''}{itemForm.compAdultQuantity > 0 && itemForm.compChildQuantity > 0 ? ' + ' : ''}{itemForm.compChildQuantity > 0 ? `${itemForm.compChildQuantity} child${itemForm.compChildQuantity !== 1 ? 'ren' : ''}` : ''} → <strong>No charge</strong></span>
+                      <span>Comp:</span>
+                      {itemForm.compAdultQuantity > 0 && (
+                        <span>{itemForm.compAdultQuantity} adult{itemForm.compAdultQuantity !== 1 ? 's' : ''}
+                          {itemForm.compAdultCostRate > 0 ? ` · cost ${(itemForm.compAdultCostRate * itemForm.compAdultQuantity).toFixed(2)}` : ' · no cost'}
+                        </span>
+                      )}
+                      {itemForm.compChildQuantity > 0 && (
+                        <span>{itemForm.compChildQuantity} child{itemForm.compChildQuantity !== 1 ? 'ren' : ''}
+                          {itemForm.compChildCostRate > 0 ? ` · cost ${(itemForm.compChildCostRate * itemForm.compChildQuantity).toFixed(2)}` : ' · no cost'}
+                        </span>
+                      )}
+                      <strong>→ No charge to guest</strong>
                     </div>
-                  </>)}
+                  )}
                   {itemForm.childQuantity > 0 && itemForm.childRackRate > 0 && (
                     <div className="font-medium pt-1 border-t border-gray-100 dark:border-gray-700">
                       Grand Total: <strong className="text-green-700 dark:text-green-400">{grandTotalPreview.toFixed(2)}</strong>

@@ -13,6 +13,8 @@ export interface LoginApiResponse {
   permissions: string[]
   organizationId: string
   organizationName: string
+  primaryColor?: string | null
+  logoBase64?: string | null
   accessToken: string
   refreshToken: string
   expiresAt: string

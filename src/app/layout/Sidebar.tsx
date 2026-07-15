@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/shared/lib/auth/AuthContext'
 import { Permissions } from '@/shared/lib/auth/permissions'
+import { getBranding } from '@/features/settings/settingsApi'
 
 interface SidebarProps {
   open: boolean
@@ -45,26 +47,34 @@ const linkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties =>
 function NavContent({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
   const { hasPermission } = useAuth()
 
+  const { data: branding } = useQuery({
+    queryKey: ['branding'],
+    queryFn: getBranding,
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const logo = user?.logoBase64 ?? branding?.logoBase64 ?? null
+
   const isVisible = (item: NavItem) =>
     !item.anyPermission || item.anyPermission.some(p => hasPermission(p))
 
   return (
     <>
-      {/* Logo area — standard 56px height for all orgs */}
-      <div className="h-14 px-4 border-b border-gray-200 dark:border-gray-800 flex items-center">
-        {user?.logoBase64
-          ? <img src={user.logoBase64} alt={user.organizationName} className="h-8 max-w-[136px] object-contain" />
+      {/* Logo + org name stacked */}
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex flex-col items-center gap-1.5">
+        {logo
+          ? <img src={logo} alt={user?.organizationName} className="h-12 w-12 rounded-full object-cover shrink-0 ring-2 ring-gray-200 dark:ring-gray-700" />
           : (
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
-                style={{ background: 'var(--color-primary)' }}>
-                {user?.organizationName?.[0]?.toUpperCase() ?? 'I'}
-              </div>
-              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
-                {user?.organizationName}
-              </span>
+            <div className="h-12 w-12 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0 ring-2 ring-gray-200 dark:ring-gray-700"
+              style={{ background: 'var(--color-primary)' }}>
+              {user?.organizationName?.[0]?.toUpperCase() ?? 'I'}
             </div>
-          )}
+          )
+        }
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate max-w-full text-center leading-tight">
+          {user?.organizationName}
+        </span>
       </div>
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
         {navItems.filter(isVisible).map((item) => (

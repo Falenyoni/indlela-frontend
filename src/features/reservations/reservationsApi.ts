@@ -42,7 +42,11 @@ export interface LineItemDto {
   childCostRate: number
   childCostTotal: number
   compAdultQuantity: number
+  compAdultCostRate: number
+  compAdultCostTotal: number
   compChildQuantity: number
+  compChildCostRate: number
+  compChildCostTotal: number
   serviceDate: string | null
   startTime: string | null
   sessionName: string | null
@@ -129,16 +133,16 @@ export interface AddLineItemRequest {
   quantity: number
   unit: string
   rackRate: number
-  reservationistDiscountPercent: number
   costRate: number
   childQuantity: number
   childRackRate: number
   childCostRate: number
   compAdultQuantity: number
+  compAdultCostRate: number
   compChildQuantity: number
+  compChildCostRate: number
   serviceDate: string | null
   startTime: string | null
-  sessionName: string | null
   meetingPoint: string | null
   notes: string | null
 }
@@ -226,6 +230,59 @@ export async function completeTrip(id: string): Promise<void> {
 
 export async function cancelReservation(id: string): Promise<void> {
   await apiFetch(`/api/reservations/${id}/cancel`, { method: 'POST' })
+}
+
+export interface DiscountRequestDto {
+  id: string
+  bookingId: string
+  reservationNumber: string
+  lineItemId: string | null
+  requestedDiscountPercent: number
+  reason: string
+  status: 'Pending' | 'Approved' | 'Rejected'
+  requestedByUserId: string
+  requestedByName: string
+  reviewedByName: string | null
+  reviewNote: string | null
+  reviewedAt: string | null
+  createdAt: string
+}
+
+export async function getDiscountRequests(bookingId?: string, status?: string): Promise<DiscountRequestDto[]> {
+  const qs = new URLSearchParams()
+  if (bookingId) qs.set('bookingId', bookingId)
+  if (status) qs.set('status', status)
+  const res = await apiFetch(`/api/discount-requests?${qs}`)
+  if (!res.ok) throw new Error('Failed to load discount requests')
+  return res.json()
+}
+
+export async function requestDiscount(bookingId: string, itemId: string, requestedDiscountPercent: number, reason: string): Promise<{ id: string }> {
+  const res = await apiFetch(`/api/reservations/${bookingId}/line-items/${itemId}/discount/request`, {
+    method: 'POST',
+    body: JSON.stringify({ requestedDiscountPercent, reason }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.message ?? 'Failed to submit discount request')
+  }
+  return res.json()
+}
+
+export async function reviewDiscountRequest(requestId: string, approved: boolean, reviewNote?: string): Promise<void> {
+  const res = await apiFetch(`/api/discount-requests/${requestId}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ approved, reviewNote: reviewNote ?? null }),
+  })
+  if (!res.ok) throw new Error('Failed to review discount request')
+}
+
+export async function updateLineItemDiscount(bookingId: string, itemId: string, discountPercent: number): Promise<void> {
+  const res = await apiFetch(`/api/reservations/${bookingId}/line-items/${itemId}/discount`, {
+    method: 'POST',
+    body: JSON.stringify({ discountPercent }),
+  })
+  if (!res.ok) throw new Error('Failed to update discount')
 }
 
 // Keep old type alias so imports elsewhere don't break immediately
