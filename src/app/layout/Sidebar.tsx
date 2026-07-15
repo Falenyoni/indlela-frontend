@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import React, { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router'
 import { useAuth } from '@/shared/lib/auth/AuthContext'
 import { Permissions } from '@/shared/lib/auth/permissions'
@@ -34,10 +34,13 @@ const settingsItem: NavItem = {
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium ${
-    isActive
-      ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+    isActive ? '' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
   }`
+
+const linkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties =>
+  isActive
+    ? { color: 'var(--color-primary)', backgroundColor: 'color-mix(in srgb, var(--color-primary) 10%, transparent)' }
+    : {}
 
 function NavContent({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
   const { hasPermission } = useAuth()
@@ -48,7 +51,7 @@ function NavContent({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
   return (
     <>
       <div className="px-4 py-4 border-b border-gray-200 dark:border-gray-800 space-y-3">
-        <span className="text-lg font-bold text-blue-600 dark:text-blue-400">Indlela</span>
+        <span className="text-lg font-bold" style={{ color: 'var(--color-primary)' }}>Indlela</span>
         {user && (
           <div className="space-y-1">
             <p className="text-xs text-gray-400 dark:text-gray-500">Organization</p>
@@ -56,14 +59,14 @@ function NavContent({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
               {user.organizationName}
             </p>
             {user.roles.length > 0 && (
-              <p className="text-xs text-blue-500 dark:text-blue-400">{user.roles.join(', ')}</p>
+              <p className="text-xs" style={{ color: 'var(--color-primary)' }}>{user.roles.join(', ')}</p>
             )}
           </div>
         )}
       </div>
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
         {navItems.filter(isVisible).map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
+          <NavLink key={item.to} to={item.to} end={item.end} className={linkClass} style={linkStyle}>
             <span className="text-base leading-none">{item.icon}</span>
             {item.label}
           </NavLink>
@@ -71,7 +74,7 @@ function NavContent({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
       </nav>
       {isVisible(settingsItem) && (
         <div className="border-t border-gray-200 dark:border-gray-800 px-2 py-3">
-          <NavLink to="/settings" className={linkClass}>
+          <NavLink to="/settings" className={linkClass} style={linkStyle}>
             <span className="text-base leading-none">⚙️</span>
             Settings
           </NavLink>
