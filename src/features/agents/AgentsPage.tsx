@@ -5,12 +5,15 @@ import {
   getAgentRateSheets, createAgentRateSheet, updateAgentRateSheet, toggleAgentRateSheet,
   type AgentRow, type AgentPayload, type AgentRateSheetRow, type AgentRateSheetPayload,
 } from './agentsApi'
+import { getActivities } from '../activities/activitiesApi'
 
 type Tab = 'agents' | 'rates'
 
 const PRODUCT_TYPES = ['Accommodation', 'Transfer', 'Activity', 'ParkFee', 'Helicopter', 'Other']
 const PT_LABELS: Record<string, string> = { ParkFee: 'Park Fee' }
 const ptLabel = (pt: string) => PT_LABELS[pt] ?? pt
+
+const ACTIVITY_LINKED_TYPES = new Set(['Transfer', 'Activity', 'ParkFee', 'Helicopter'])
 
 const inputCls = 'w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
 const labelCls = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
@@ -201,6 +204,11 @@ function RateSheetsTab() {
     queryKey: ['agent-rate-sheets', agentFilter],
     queryFn: () => getAgentRateSheets(agentFilter || undefined),
   })
+  const { data: activities = [] } = useQuery({
+    queryKey: ['activities', createForm.productType],
+    queryFn: () => getActivities(createForm.productType),
+    enabled: showCreate && ACTIVITY_LINKED_TYPES.has(createForm.productType),
+  })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['agent-rate-sheets'] })
 
@@ -305,14 +313,36 @@ function RateSheetsTab() {
               </div>
               <div>
                 <label className={labelCls}>Product Type *</label>
-                <select value={createForm.productType} onChange={e => setCreateForm(f => ({ ...f, productType: e.target.value }))} className={inputCls}>
+                <select value={createForm.productType} onChange={e => setCreateForm(f => ({ ...f, productType: e.target.value, productId: undefined, productName: undefined }))} className={inputCls}>
                   {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{ptLabel(pt)}</option>)}
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Product Name (optional)</label>
-                <input value={createForm.productName ?? ''} onChange={e => setCreateForm(f => ({ ...f, productName: e.target.value || undefined }))}
-                  placeholder="Leave blank to match all" className={inputCls} />
+                <label className={labelCls}>
+                  Product <span className="text-gray-400 font-normal">(optional — blank matches all)</span>
+                </label>
+                {ACTIVITY_LINKED_TYPES.has(createForm.productType) ? (
+                  <select
+                    value={createForm.productId ?? ''}
+                    onChange={e => {
+                      const act = activities.find(a => a.id === e.target.value)
+                      setCreateForm(f => ({ ...f, productId: act?.id, productName: act?.name }))
+                    }}
+                    className={inputCls}
+                  >
+                    <option value="">All {ptLabel(createForm.productType)} products</option>
+                    {activities.filter(a => a.isActive).map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={createForm.productName ?? ''}
+                    onChange={e => setCreateForm(f => ({ ...f, productName: e.target.value || undefined, productId: undefined }))}
+                    placeholder="Leave blank to match all"
+                    className={inputCls}
+                  />
+                )}
               </div>
               <div>
                 <label className={labelCls}>Adult Rate (R) *</label>

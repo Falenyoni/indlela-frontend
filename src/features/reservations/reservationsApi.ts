@@ -41,7 +41,6 @@ export interface LineItemDto {
   startTime: string | null
   sessionName: string | null
   meetingPoint: string | null
-  paymentHandling: string
   notes: string | null
 }
 
@@ -76,6 +75,7 @@ export interface BookingDetail {
   totalAmount: number
   outstandingBalance: number
   status: string
+  paymentHandling: string
   notes: string | null
   createdAt: string
   lineItems: LineItemDto[]
@@ -98,6 +98,7 @@ export interface CreateBookingRequest {
   reservationistDiscountPercent: number
   notes: string | null
   bookingSource: string
+  paymentHandling: string
 }
 
 export interface ConsultantOption {
@@ -127,7 +128,6 @@ export interface AddLineItemRequest {
   startTime: string | null
   sessionName: string | null
   meetingPoint: string | null
-  paymentHandling: string
   notes: string | null
 }
 

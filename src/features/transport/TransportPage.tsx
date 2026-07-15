@@ -31,13 +31,13 @@ export function TransportPage() {
     queryFn: () => getTransferRequests(statusFilter || undefined, date || undefined),
   })
 
-  const { data: vehicles = [] } = useQuery({
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
     queryKey: ['vehicles'],
     queryFn: () => getVehicles(),
     enabled: !!assigning && !assignForm.isSubcontracted,
   })
 
-  const { data: drivers = [] } = useQuery({
+  const { data: drivers = [], isLoading: driversLoading } = useQuery({
     queryKey: ['drivers'],
     queryFn: () => getDrivers(),
     enabled: !!assigning && !assignForm.isSubcontracted,
@@ -74,7 +74,7 @@ export function TransportPage() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Daily transfer assignments</p>
       </div>
 
-      {/* Date selector — today / tomorrow only */}
+      {/* Date + status filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden text-sm">
           {[{ label: 'Today', value: today }, { label: 'Tomorrow', value: tomorrow }].map(d => (
@@ -86,7 +86,12 @@ export function TransportPage() {
             </button>
           ))}
         </div>
-        <span className="text-sm text-gray-400">{date}</span>
+        <input
+          type="date"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+          className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
         <div className="flex gap-1.5 flex-wrap ml-auto">
           {['', 'Pending', 'Assigned', 'Confirmed', 'Completed'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
@@ -182,8 +187,8 @@ export function TransportPage() {
               <div className="space-y-3">
                 <div>
                   <label className={labelCls}>Vehicle</label>
-                  <select value={assignForm.vehicleId ?? ''} onChange={e => setAssignForm(f => ({ ...f, vehicleId: e.target.value || undefined }))} className={inputCls}>
-                    <option value="">Select vehicle…</option>
+                  <select value={assignForm.vehicleId ?? ''} onChange={e => setAssignForm(f => ({ ...f, vehicleId: e.target.value || undefined }))} className={inputCls} disabled={vehiclesLoading}>
+                    <option value="">{vehiclesLoading ? 'Loading…' : vehicles.filter(v => v.isActive).length === 0 ? 'No vehicles — add in Settings' : 'Select vehicle…'}</option>
                     {vehicles.filter(v => v.isActive).map(v => (
                       <option key={v.id} value={v.id}>{v.registration} — {v.make} {v.model} ({v.vehicleType}, {v.capacity} pax)</option>
                     ))}
@@ -191,10 +196,10 @@ export function TransportPage() {
                 </div>
                 <div>
                   <label className={labelCls}>Driver</label>
-                  <select value={assignForm.driverId ?? ''} onChange={e => setAssignForm(f => ({ ...f, driverId: e.target.value || undefined }))} className={inputCls}>
-                    <option value="">Select driver…</option>
+                  <select value={assignForm.driverId ?? ''} onChange={e => setAssignForm(f => ({ ...f, driverId: e.target.value || undefined }))} className={inputCls} disabled={driversLoading}>
+                    <option value="">{driversLoading ? 'Loading…' : drivers.filter(d => d.isActive).length === 0 ? 'No drivers — add in Settings' : 'Select driver…'}</option>
                     {drivers.filter(d => d.isActive).map(d => (
-                      <option key={d.id} value={d.id}>{d.fullName} ({d.licenseNumber})</option>
+                      <option key={d.id} value={d.id}>{d.isInternal ? '● ' : '○ '}{d.fullName} ({d.licenseNumber}){d.isInternal ? ' — Internal' : ' — Subcontracted'}</option>
                     ))}
                   </select>
                 </div>

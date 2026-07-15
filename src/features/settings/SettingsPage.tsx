@@ -6,9 +6,9 @@ import {
   type UserRow, type RoleRow,
 } from './settingsApi'
 import {
-  getVehicleTypes, createVehicleType, toggleVehicleType,
-  getVehicleMakes, createVehicleMake, toggleVehicleMake,
-  getVehicleModels, createVehicleModel, toggleVehicleModel,
+  getVehicleTypes, createVehicleType, updateVehicleType, toggleVehicleType,
+  getVehicleMakes, createVehicleMake, updateVehicleMake, toggleVehicleMake,
+  getVehicleModels, createVehicleModel, updateVehicleModel, toggleVehicleModel,
   getVehicles, createVehicle, updateVehicle, toggleVehicle,
   getDrivers, createDriver, updateDriver, toggleDriver,
   type VehicleMakeRow, type VehicleModelRow,
@@ -521,7 +521,7 @@ function RolesTab({ allPermissions }: { allPermissions: string[] }) {
 // ── Fleet Setup Tab ───────────────────────────────────────────────────────────
 
 function RefList({
-  title, items, isLoading, newName, onNewName, onAdd, onToggle, isPendingAdd, isPendingToggle, error,
+  title, items, isLoading, newName, onNewName, onAdd, onRename, onToggle, isPendingAdd, isPendingToggle, error,
 }: {
   title: string
   items: { id: string; name: string; isActive: boolean }[]
@@ -529,12 +529,18 @@ function RefList({
   newName: string
   onNewName: (v: string) => void
   onAdd: () => void
+  onRename: (id: string, name: string) => void
   onToggle: (id: string) => void
   isPendingAdd: boolean
   isPendingToggle: boolean
   error?: string
-  placeholder?: string
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+
+  const startEdit = (item: { id: string; name: string }) => { setEditingId(item.id); setEditName(item.name) }
+  const commitEdit = () => { if (editName.trim() && editingId) onRename(editingId, editName.trim()); setEditingId(null) }
+
   return (
     <div className="space-y-3">
       <h3 className="font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
@@ -553,11 +559,26 @@ function RefList({
         {!isLoading && items.length === 0 && <p className="px-4 py-6 text-sm text-center text-gray-400">No {title.toLowerCase()} yet</p>}
         {items.map((item, i) => (
           <div key={item.id} className={`flex items-center justify-between px-4 py-2.5 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''} ${!item.isActive ? 'opacity-50' : ''}`}>
-            <span className="text-sm text-gray-900 dark:text-gray-100">{item.name}</span>
+            {editingId === item.id ? (
+              <input
+                autoFocus
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingId(null) }}
+                className="text-sm border border-blue-400 rounded px-2 py-0.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 w-40"
+              />
+            ) : (
+              <span className="text-sm text-gray-900 dark:text-gray-100">{item.name}</span>
+            )}
             <div className="flex items-center gap-3">
               <span className={`px-1.5 py-0.5 rounded text-xs ${item.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
                 {item.isActive ? 'Active' : 'Inactive'}
               </span>
+              <button onClick={() => startEdit(item)}
+                className="text-xs text-blue-500 hover:underline">
+                Edit
+              </button>
               <button onClick={() => onToggle(item.id)} disabled={isPendingToggle}
                 className={`text-xs hover:underline ${item.isActive ? 'text-red-500' : 'text-green-600'}`}>
                 {item.isActive ? 'Disable' : 'Enable'}
@@ -576,6 +597,10 @@ function FleetSetupTab() {
   const [newTypeName, setNewTypeName] = useState('')
   const [newMakeName, setNewMakeName] = useState('')
   const [newModelName, setNewModelName] = useState('')
+  const [editingMakeId, setEditingMakeId] = useState<string | null>(null)
+  const [editMakeName, setEditMakeName] = useState('')
+  const [editingModelId, setEditingModelId] = useState<string | null>(null)
+  const [editModelName, setEditModelName] = useState('')
 
   const { data: types = [], isLoading: typesLoading } = useQuery({
     queryKey: ['vehicle-types'],
@@ -597,7 +622,10 @@ function FleetSetupTab() {
     mutationFn: () => createVehicleType(newTypeName.trim()),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicle-types'] }); setNewTypeName('') },
   })
-
+  const renameType = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateVehicleType(id, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-types'] }),
+  })
   const toggleType = useMutation({
     mutationFn: (id: string) => toggleVehicleType(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-types'] }),
@@ -607,7 +635,10 @@ function FleetSetupTab() {
     mutationFn: () => createVehicleMake(newMakeName.trim()),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicle-makes'] }); setNewMakeName('') },
   })
-
+  const renameMake = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateVehicleMake(id, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-makes'] }),
+  })
   const toggleMake = useMutation({
     mutationFn: (id: string) => toggleVehicleMake(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-makes'] }),
@@ -617,7 +648,10 @@ function FleetSetupTab() {
     mutationFn: () => createVehicleModel(selectedMake!.id, newModelName.trim()),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicle-models', selectedMake?.id] }); setNewModelName('') },
   })
-
+  const renameModel = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateVehicleModel(id, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-models', selectedMake?.id] }),
+  })
   const toggleModel = useMutation({
     mutationFn: (id: string) => toggleVehicleModel(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vehicle-models', selectedMake?.id] }),
@@ -633,6 +667,7 @@ function FleetSetupTab() {
         newName={newTypeName}
         onNewName={setNewTypeName}
         onAdd={() => addType.mutate()}
+        onRename={(id, name) => renameType.mutate({ id, name })}
         onToggle={id => toggleType.mutate(id)}
         isPendingAdd={addType.isPending}
         isPendingToggle={toggleType.isPending}
@@ -657,18 +692,34 @@ function FleetSetupTab() {
           {makesLoading && <p className="px-4 py-6 text-sm text-center text-gray-400">Loading…</p>}
           {!makesLoading && makes.length === 0 && <p className="px-4 py-6 text-sm text-center text-gray-400">No makes yet</p>}
           {makes.map((m, i) => (
-            <div key={m.id} onClick={() => setSelectedMake(selectedMake?.id === m.id ? null : m)}
+            <div key={m.id} onClick={() => editingMakeId !== m.id && setSelectedMake(selectedMake?.id === m.id ? null : m)}
               className={`flex items-center justify-between px-4 py-2.5 cursor-pointer
                 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}
                 ${selectedMake?.id === m.id ? 'bg-blue-50 dark:bg-blue-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}
                 ${!m.isActive ? 'opacity-50' : ''}`}>
-              <span className={`text-sm font-medium ${selectedMake?.id === m.id ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-gray-100'}`}>
-                {m.name}
-              </span>
+              {editingMakeId === m.id ? (
+                <input
+                  autoFocus
+                  value={editMakeName}
+                  onChange={e => setEditMakeName(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  onBlur={() => { renameMake.mutate({ id: m.id, name: editMakeName.trim() }); setEditingMakeId(null) }}
+                  onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') { renameMake.mutate({ id: m.id, name: editMakeName.trim() }); setEditingMakeId(null) } if (e.key === 'Escape') setEditingMakeId(null) }}
+                  className="text-sm border border-blue-400 rounded px-2 py-0.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
+                />
+              ) : (
+                <span className={`text-sm font-medium ${selectedMake?.id === m.id ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-gray-100'}`}>
+                  {m.name}
+                </span>
+              )}
               <div className="flex items-center gap-3">
                 <span className={`px-1.5 py-0.5 rounded text-xs ${m.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
                   {m.isActive ? 'Active' : 'Inactive'}
                 </span>
+                <button onClick={e => { e.stopPropagation(); setEditingMakeId(m.id); setEditMakeName(m.name) }}
+                  className="text-xs text-blue-500 hover:underline">
+                  Edit
+                </button>
                 <button onClick={e => { e.stopPropagation(); toggleMake.mutate(m.id) }} disabled={toggleMake.isPending}
                   className={`text-xs hover:underline ${m.isActive ? 'text-red-500' : 'text-green-600'}`}>
                   {m.isActive ? 'Disable' : 'Enable'}
@@ -704,11 +755,26 @@ function FleetSetupTab() {
               {!modelsLoading && models.length === 0 && <p className="px-4 py-6 text-sm text-center text-gray-400">No models for {selectedMake.name} yet</p>}
               {models.map((m: VehicleModelRow, i: number) => (
                 <div key={m.id} className={`flex items-center justify-between px-4 py-2.5 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''} ${!m.isActive ? 'opacity-50' : ''}`}>
-                  <span className="text-sm text-gray-900 dark:text-gray-100">{m.name}</span>
+                  {editingModelId === m.id ? (
+                    <input
+                      autoFocus
+                      value={editModelName}
+                      onChange={e => setEditModelName(e.target.value)}
+                      onBlur={() => { renameModel.mutate({ id: m.id, name: editModelName.trim() }); setEditingModelId(null) }}
+                      onKeyDown={e => { if (e.key === 'Enter') { renameModel.mutate({ id: m.id, name: editModelName.trim() }); setEditingModelId(null) } if (e.key === 'Escape') setEditingModelId(null) }}
+                      className="text-sm border border-blue-400 rounded px-2 py-0.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
+                    />
+                  ) : (
+                    <span className="text-sm text-gray-900 dark:text-gray-100">{m.name}</span>
+                  )}
                   <div className="flex items-center gap-3">
                     <span className={`px-1.5 py-0.5 rounded text-xs ${m.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
                       {m.isActive ? 'Active' : 'Inactive'}
                     </span>
+                    <button onClick={() => { setEditingModelId(m.id); setEditModelName(m.name) }}
+                      className="text-xs text-blue-500 hover:underline">
+                      Edit
+                    </button>
                     <button onClick={() => toggleModel.mutate(m.id)} disabled={toggleModel.isPending}
                       className={`text-xs hover:underline ${m.isActive ? 'text-red-500' : 'text-green-600'}`}>
                       {m.isActive ? 'Disable' : 'Enable'}
@@ -870,7 +936,7 @@ function FleetTab() {
 
 // ── Drivers Tab ───────────────────────────────────────────────────────────────
 
-const emptyDriver: DriverPayload = { fullName: '', licenseNumber: '', phone: null }
+const emptyDriver: DriverPayload = { fullName: '', licenseNumber: '', phone: null, userId: null }
 
 function DriversTab() {
   const qc = useQueryClient()
@@ -880,6 +946,7 @@ function DriversTab() {
   const [form, setForm] = useState<DriverPayload>(emptyDriver)
 
   const { data: drivers = [], isLoading } = useQuery({ queryKey: ['drivers', search], queryFn: () => getDrivers(search || undefined) })
+  const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: () => getUsers(), enabled: showForm })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['drivers'] })
   const save = useMutation({
     mutationFn: () => editing ? updateDriver(editing.id, form) : createDriver(form).then(() => undefined),
@@ -888,7 +955,11 @@ function DriversTab() {
   const toggle = useMutation({ mutationFn: (id: string) => toggleDriver(id), onSuccess: invalidate })
 
   const openCreate = () => { setEditing(null); setForm(emptyDriver); setShowForm(true) }
-  const openEdit = (d: DriverRow) => { setEditing(d); setForm({ fullName: d.fullName, licenseNumber: d.licenseNumber, phone: d.phone }); setShowForm(true) }
+  const openEdit = (d: DriverRow) => {
+    setEditing(d)
+    setForm({ fullName: d.fullName, licenseNumber: d.licenseNumber, phone: d.phone, userId: d.userId })
+    setShowForm(true)
+  }
   const closeForm = () => { setShowForm(false); setEditing(null); setForm(emptyDriver) }
 
   return (
@@ -901,18 +972,23 @@ function DriversTab() {
       <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-            <tr>{['Name', 'License', 'Phone', 'Status', ''].map(h =>
+            <tr>{['Name', 'License', 'Phone', 'Type', 'Status', ''].map(h =>
               <th key={h} className="text-left px-4 py-3 font-medium whitespace-nowrap">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {isLoading && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">Loading…</td></tr>}
-            {!isLoading && drivers.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">No drivers yet</td></tr>}
+            {isLoading && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Loading…</td></tr>}
+            {!isLoading && drivers.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">No drivers yet</td></tr>}
             {drivers.map(d => (
               <tr key={d.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${!d.isActive ? 'opacity-50' : ''}`}>
                 <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{d.fullName}</td>
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">{d.licenseNumber}</td>
                 <td className="px-4 py-3 text-gray-500">{d.phone ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${d.isInternal ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                    {d.isInternal ? 'Internal' : 'Subcontracted'}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${d.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500'}`}>
                     {d.isActive ? 'Active' : 'Inactive'}
@@ -952,6 +1028,15 @@ function DriversTab() {
                   <label className={labelCls}>Phone</label>
                   <input type="tel" value={form.phone ?? ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value || null }))} placeholder="+263 77 000 0000" className={inputCls} />
                 </div>
+              </div>
+              <div>
+                <label className={labelCls}>Link to user account <span className="text-gray-400 font-normal">(optional — for internal drivers with tablets)</span></label>
+                <select value={form.userId ?? ''} onChange={e => setForm(f => ({ ...f, userId: e.target.value || null }))} className={inputCls}>
+                  <option value="">Subcontracted — no system account</option>
+                  {users.map((u: UserRow) => (
+                    <option key={u.id} value={u.id}>{u.fullName} ({u.email})</option>
+                  ))}
+                </select>
               </div>
             </div>
             {save.isError && <p className="text-sm text-red-500">{String(save.error)}</p>}

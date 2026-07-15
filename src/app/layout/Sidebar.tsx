@@ -24,6 +24,7 @@ const navItems: NavItem[] = [
   { to: '/transport',    label: 'Transport',    icon: '🚐', anyPermission: [Permissions.Transfers.Assign, Permissions.Transfers.ViewOwn, Permissions.Fleet.View] },
   { to: '/housekeeping', label: 'Housekeeping', icon: '🧹', anyPermission: [Permissions.MasterData.View] },
   { to: '/reporting',    label: 'Reporting',    icon: '📊', anyPermission: [Permissions.Reports.View] },
+  { to: '/financial',    label: 'Financial',    icon: '💹', anyPermission: [Permissions.Reports.View] },
   { to: '/billing',      label: 'Billing',      icon: '💳', anyPermission: [Permissions.Settings.Users] },
 ]
 

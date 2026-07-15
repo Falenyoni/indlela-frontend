@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router'
+import { createBrowserRouter, Navigate } from 'react-router'
 import { lazy, Suspense } from 'react'
 import App from '@/App'
 import { ProtectedRoute } from '@/shared/lib/auth/ProtectedRoute'
@@ -14,6 +14,7 @@ const TransportPage    = lazy(() => import('@/features/transport/TransportPage')
 const BillingPage      = lazy(() => import('@/features/billing/BillingPage').then(m => ({ default: m.BillingPage })))
 const SettingsPage     = lazy(() => import('@/features/settings/SettingsPage').then(m => ({ default: m.SettingsPage })))
 const ReportingPage    = lazy(() => import('@/features/reporting/ReportingPage').then(m => ({ default: m.ReportingPage })))
+const FinancialPage    = lazy(() => import('@/features/financial/FinancialPage').then(m => ({ default: m.FinancialPage })))
 const LoginPage        = lazy(() => import('@/features/auth/LoginPage').then(m => ({ default: m.LoginPage })))
 const SetupPage        = lazy(() => import('@/features/setup/SetupPage').then(m => ({ default: m.SetupPage })))
 
@@ -48,7 +49,13 @@ export const router = createBrowserRouter([
           { path: 'housekeeping',     element: guard(settings,   <HousekeepingPage />) },
           { path: 'billing',          element: guard(settings,   <BillingPage />) },
           { path: 'reporting',        element: guard([Permissions.Reports.View], <ReportingPage />) },
+          { path: 'financial',        element: guard([Permissions.Reports.View], <FinancialPage />) },
           { path: 'settings',         element: guard(settings,   <SettingsPage />) },
+          { path: 'activities',       element: <Navigate to="/settings" replace /> },
+          { path: 'properties',       element: <Navigate to="/settings" replace /> },
+          { path: 'suppliers',        element: <Navigate to="/settings" replace /> },
+          { path: 'agents',           element: <Navigate to="/settings" replace /> },
+          { path: 'locations',        element: <Navigate to="/settings" replace /> },
         ],
       },
     ],

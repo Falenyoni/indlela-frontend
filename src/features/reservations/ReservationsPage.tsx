@@ -17,6 +17,41 @@ import { Permissions } from '@/shared/lib/auth/permissions'
 
 const STATUSES = ['', 'Enquiry', 'Quoted', 'Confirmed', 'InProgress', 'Completed', 'Cancelled']
 
+type DatePeriod = '' | 'today' | 'week' | 'month' | 'year' | 'custom'
+const DATE_PERIODS: { value: DatePeriod; label: string }[] = [
+  { value: '', label: 'All time' },
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This week' },
+  { value: 'month', label: 'This month' },
+  { value: 'year', label: 'This year' },
+  { value: 'custom', label: 'Custom…' },
+]
+
+function getPeriodRange(period: DatePeriod): { from: string; to: string } | null {
+  if (!period || period === 'custom') return null
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+  if (period === 'today') {
+    const t = fmt(now)
+    return { from: t, to: t }
+  }
+  if (period === 'week') {
+    const day = now.getDay() === 0 ? 6 : now.getDay() - 1 // Mon=0
+    const mon = new Date(now); mon.setDate(now.getDate() - day)
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
+    return { from: fmt(mon), to: fmt(sun) }
+  }
+  if (period === 'month') {
+    const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    return { from, to: fmt(last) }
+  }
+  // year
+  return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` }
+}
+
 const STATUS_COLORS: Record<string, string> = {
   Enquiry:    'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
   Quoted:     'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
@@ -72,6 +107,7 @@ const emptyForm: CreateBookingRequest = {
   pax: 1, currency: 'ZAR', exchangeRate: 1,
   reservationistDiscountPercent: 0,
   notes: null, bookingSource: 'WalkIn',
+  paymentHandling: 'ThroughDMC',
 }
 
 const emptyItem: AddLineItemRequest = {
@@ -90,7 +126,6 @@ const emptyItem: AddLineItemRequest = {
   startTime: null,
   sessionName: null,
   meetingPoint: null,
-  paymentHandling: 'ThroughDMC',
   notes: null,
 }
 
@@ -124,6 +159,9 @@ export function ReservationsPage() {
   const isConsultant = hasPermission(Permissions.Bookings.ViewOwn) && !isSupervisorOrAbove
 
   const [statusFilter, setStatusFilter] = useState('')
+  const [datePeriod, setDatePeriod] = useState<DatePeriod>('')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [form, setForm] = useState<CreateBookingRequest>({
@@ -132,6 +170,8 @@ export function ReservationsPage() {
   })
   const [itemForm, setItemForm] = useState<AddLineItemRequest>(emptyItem)
   const [paymentForm, setPaymentForm] = useState<RecordPaymentRequest>(emptyPayment())
+  const [showAddItem, setShowAddItem] = useState(false)
+  const [showAddPayment, setShowAddPayment] = useState(false)
 
   const { data: bookings = [] } = useQuery({
     queryKey: ['reservations', statusFilter],
@@ -219,7 +259,7 @@ export function ReservationsPage() {
 
   const addItem = useMutation({
     mutationFn: () => addLineItem(detailId!, itemForm),
-    onSuccess: () => { refetchDetail(); invalidate(); setItemForm(emptyItem) },
+    onSuccess: () => { refetchDetail(); invalidate(); setItemForm(emptyItem); setShowAddItem(false) },
   })
 
   const removeItem = useMutation({
@@ -229,18 +269,28 @@ export function ReservationsPage() {
 
   const addPayment = useMutation({
     mutationFn: () => recordPayment(detailId!, { ...paymentForm, bookingId: detailId! }),
-    onSuccess: () => { refetchDetail(); invalidate(); setPaymentForm(emptyPayment()) },
+    onSuccess: () => { refetchDetail(); invalidate(); setPaymentForm(emptyPayment()); setShowAddPayment(false) },
   })
 
   const openDetail = (id: string) => {
     setDetailId(id)
     setItemForm(emptyItem)
     setPaymentForm(emptyPayment())
+    setShowAddItem(false)
+    setShowAddPayment(false)
   }
 
   const canCreate = !!form.guestId && !!form.consultantName && !!form.travelStartDate && !!form.travelEndDate
   const canAddItem = !!itemForm.description && itemForm.rackRate > 0 && itemForm.quantity > 0
   const canAddPayment = paymentForm.amount > 0 && !!paymentForm.paidAt
+
+  const periodRange = datePeriod === 'custom'
+    ? (customFrom && customTo ? { from: customFrom, to: customTo } : null)
+    : getPeriodRange(datePeriod)
+
+  const filteredBookings = periodRange
+    ? bookings.filter((b: BookingRow) => b.travelStartDate <= periodRange.to && b.travelEndDate >= periodRange.from)
+    : bookings
 
   const sellingPreview = computeSellingRate(itemForm.rackRate, itemForm.reservationistDiscountPercent)
   const totalPreview = sellingPreview * itemForm.quantity
@@ -262,18 +312,31 @@ export function ReservationsPage() {
         </button>
       </div>
 
-      {/* Status filter */}
-      <div className="flex gap-2 flex-wrap">
-        {STATUSES.map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              statusFilter === s
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-            }`}>
-            {s || 'All'}
-          </button>
-        ))}
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          {STATUSES.map(s => <option key={s} value={s}>{s || 'All statuses'}</option>)}
+        </select>
+
+        <select value={datePeriod} onChange={e => setDatePeriod(e.target.value as DatePeriod)}
+          className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          {DATE_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+
+        {datePeriod === 'custom' && (<>
+          <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+            className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <span className="text-gray-400 text-sm">→</span>
+          <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+            className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </>)}
+
+        {periodRange && (
+          <span className="text-xs text-gray-400">
+            {filteredBookings.length} of {bookings.length}
+          </span>
+        )}
       </div>
 
       {/* Bookings table */}
@@ -285,7 +348,7 @@ export function ReservationsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {bookings.map((b: BookingRow) => (
+            {filteredBookings.map((b: BookingRow) => (
               <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">{b.reservationNumber}</td>
                 <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{b.guestName}</td>
@@ -302,7 +365,7 @@ export function ReservationsPage() {
                 </td>
               </tr>
             ))}
-            {bookings.length === 0 && (
+            {filteredBookings.length === 0 && (
               <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">No bookings found</td></tr>
             )}
           </tbody>
@@ -350,11 +413,21 @@ export function ReservationsPage() {
               )}
             </div>
 
-            <div>
-              <label className={labelCls}>Booking Source</label>
-              <select value={form.bookingSource} onChange={e => setForm(f => ({ ...f, bookingSource: e.target.value }))} className={inputCls}>
-                {BOOKING_SOURCES.map(s => <option key={s} value={s}>{s === 'WalkIn' ? 'Walk-in' : s}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Booking Source</label>
+                <select value={form.bookingSource} onChange={e => setForm(f => ({ ...f, bookingSource: e.target.value }))} className={inputCls}>
+                  {BOOKING_SOURCES.map(s => <option key={s} value={s}>{s === 'WalkIn' ? 'Walk-in' : s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Payment Handling</label>
+                <select value={form.paymentHandling} onChange={e => setForm(f => ({ ...f, paymentHandling: e.target.value }))} className={inputCls}>
+                  <option value="ThroughDMC">Through DMC (invoiced)</option>
+                  <option value="GuestPaysDirect">Guest Pays Direct</option>
+                  <option value="ThroughAgent">Through Agent</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -444,6 +517,12 @@ export function ReservationsPage() {
                   <div className="font-medium text-gray-900 dark:text-gray-100 text-xs">{value}</div>
                 </div>
               ))}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-0.5">Payment Handling</div>
+                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${PH_COLORS[detail.paymentHandling] ?? ''}`}>
+                  {PH_LABELS[detail.paymentHandling] ?? detail.paymentHandling}
+                </span>
+              </div>
             </div>
 
             {detail.notes && (
@@ -486,7 +565,15 @@ export function ReservationsPage() {
 
             {/* ── ITINERARY / LINE ITEMS ── */}
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
-              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Itinerary</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100">Itinerary</h4>
+                {detail.status !== 'Completed' && detail.status !== 'Cancelled' && (
+                  <button onClick={() => setShowAddItem(true)}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
+                    + Add Item
+                  </button>
+                )}
+              </div>
 
               {detail.lineItems.length > 0 ? (
                 <div className="overflow-x-auto">
@@ -499,7 +586,7 @@ export function ReservationsPage() {
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {detail.lineItems.map(item => (
                         <React.Fragment key={item.id}>
-                          <tr className={item.paymentHandling === 'GuestPaysDirect' ? 'opacity-60' : ''}>
+                          <tr className={detail.paymentHandling === 'GuestPaysDirect' ? 'opacity-60' : ''}>
                             <td className="px-3 py-2 whitespace-nowrap">
                               <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${PT_COLORS[item.productType] ?? PT_COLORS.Other}`}>
                                 {ptLabel(item.productType)}
@@ -515,19 +602,13 @@ export function ReservationsPage() {
                                   {item.meetingPoint && <span>· {item.meetingPoint}</span>}
                                 </div>
                               )}
-                              {/* Payment handling badge — only show non-default */}
-                              {item.paymentHandling !== 'ThroughDMC' && (
-                                <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs ${PH_COLORS[item.paymentHandling] ?? ''}`}>
-                                  {PH_LABELS[item.paymentHandling]}
-                                </span>
-                              )}
                               {item.notes && <div className="text-gray-400 italic truncate">{item.notes}</div>}
                             </td>
                             <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{item.quantity} {item.unit}</td>
                             <td className="px-3 py-2 text-gray-500">{item.rackRate.toFixed(2)}</td>
                             <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{item.sellingRate.toFixed(2)}</td>
                             <td className="px-3 py-2 font-semibold text-gray-900 dark:text-gray-100">
-                              {item.paymentHandling === 'GuestPaysDirect'
+                              {detail.paymentHandling === 'GuestPaysDirect'
                                 ? <span className="text-amber-600 dark:text-amber-400 font-normal italic">Guest pays</span>
                                 : item.sellingTotal.toFixed(2)}
                             </td>
@@ -566,245 +647,26 @@ export function ReservationsPage() {
                   </table>
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">No items yet. Add products below.</p>
+                <p className="text-sm text-gray-400">No items yet.</p>
               )}
 
-              {/* Add line item form */}
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3 bg-gray-50 dark:bg-gray-800/50">
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Add Item</p>
-
-                <div>
-                  <label className={labelCls}>Type</label>
-                  <select value={itemForm.productType}
-                    onChange={e => {
-                      const t = e.target.value
-                      const defaultUnit = t === 'Accommodation' ? 'nights' : t === 'Transfer' ? 'trips' : 'pax'
-                      setItemForm(f => ({ ...f, productType: t, productId: null, description: '', rackRate: 0, childRackRate: 0, unit: defaultUnit }))
-                    }}
-                    className={inputCls}>
-                    {PRODUCT_TYPES.map(t => <option key={t} value={t}>{ptLabel(t)}</option>)}
-                  </select>
-                </div>
-
-                {itemForm.productType === 'Accommodation' && (
-                  <div>
-                    <label className={labelCls}>Property Type</label>
-                    <select value={itemForm.productId ?? ''}
-                      onChange={e => {
-                        const pt = propertyTypes.find(x => x.id === e.target.value)
-                        setItemForm(f => ({ ...f, productId: e.target.value || null, description: pt ? pt.name : f.description, rackRate: pt ? pt.baseRatePerNight : f.rackRate, unit: 'nights' }))
-                      }}
-                      className={inputCls}>
-                      <option value="">Select…</option>
-                      {propertyTypes.filter(p => p.isActive).map(p => (
-                        <option key={p.id} value={p.id}>{p.name} — {detail.currency} {p.baseRatePerNight.toFixed(2)}/night</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {itemForm.productType === 'Activity' && (
-                  <div>
-                    <label className={labelCls}>Activity</label>
-                    <select value={itemForm.productId ?? ''}
-                      onChange={e => {
-                        const a = activities.find(x => x.id === e.target.value)
-                        setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, unit: 'pax' }))
-                      }}
-                      className={inputCls}>
-                      <option value="">Select…</option>
-                      {activities.filter(a => a.isActive).map(a => (
-                        <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/pax</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {itemForm.productType === 'Transfer' && (
-                  <div>
-                    <label className={labelCls}>Transfer</label>
-                    <select value={itemForm.productId ?? ''}
-                      onChange={e => {
-                        const a = transferActivities.find(x => x.id === e.target.value)
-                        setItemForm(f => ({
-                          ...f,
-                          productId: e.target.value || null,
-                          description: a ? a.name : f.description,
-                          rackRate: a ? a.pricePerPerson : f.rackRate,
-                          childRackRate: a?.childPricePerPerson ?? f.childRackRate,
-                          unit: 'trips',
-                        }))
-                      }}
-                      className={inputCls}>
-                      <option value="">Select transfer…</option>
-                      {transferActivities.filter(a => a.isActive).map(a => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/trip
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {itemForm.productType === 'ParkFee' && (
-                  <div>
-                    <label className={labelCls}>Park Fee</label>
-                    <select value={itemForm.productId ?? ''}
-                      onChange={e => {
-                        const a = parkFeeActivities.find(x => x.id === e.target.value)
-                        setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, childRackRate: a?.childPricePerPerson ?? f.childRackRate, unit: 'pax' }))
-                      }}
-                      className={inputCls}>
-                      <option value="">Select…</option>
-                      {parkFeeActivities.filter(a => a.isActive).map(a => (
-                        <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/adult{a.childPricePerPerson ? ` · ${a.childPricePerPerson.toFixed(2)}/child` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {itemForm.productType === 'Helicopter' && (
-                  <div>
-                    <label className={labelCls}>Helicopter Flight</label>
-                    <select value={itemForm.productId ?? ''}
-                      onChange={e => {
-                        const a = helicopterActivities.find(x => x.id === e.target.value)
-                        setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, childRackRate: a?.childPricePerPerson ?? f.childRackRate, unit: 'pax' }))
-                      }}
-                      className={inputCls}>
-                      <option value="">Select…</option>
-                      {helicopterActivities.filter(a => a.isActive).map(a => (
-                        <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/pax</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div>
-                  <label className={labelCls}>Description *</label>
-                  <input value={itemForm.description} onChange={e => setItemForm(f => ({ ...f, description: e.target.value }))}
-                    placeholder="e.g. Sunset Cruise — 3 adults" className={inputCls} />
-                </div>
-
-                <div className="grid grid-cols-4 gap-2">
-                  <div><label className={labelCls}>Qty *</label>
-                    <input type="number" min={0.01} step={0.01} value={itemForm.quantity}
-                      onChange={e => setItemForm(f => ({ ...f, quantity: Number(e.target.value) }))} className={inputCls} /></div>
-                  <div><label className={labelCls}>Unit</label>
-                    <input list="units-list" value={itemForm.unit} onChange={e => setItemForm(f => ({ ...f, unit: e.target.value }))} className={inputCls} />
-                    <datalist id="units-list">{['nights', 'pax', 'trips', 'days', 'units'].map(u => <option key={u} value={u} />)}</datalist>
-                  </div>
-                  <div><label className={labelCls}>Rack Rate *</label>
-                    <input type="number" min={0} step={0.01} value={itemForm.rackRate}
-                      onChange={e => setItemForm(f => ({ ...f, rackRate: Number(e.target.value) }))} className={inputCls} /></div>
-                  <div><label className={labelCls}>Cost Rate</label>
-                    <input type="number" min={0} step={0.01} value={itemForm.costRate}
-                      onChange={e => setItemForm(f => ({ ...f, costRate: Number(e.target.value) }))} className={inputCls} /></div>
-                </div>
-
-                <div>
-                  <label className={labelCls}>Res. Discount %</label>
-                  <input type="number" min={0} max={100} step={0.5} value={itemForm.reservationistDiscountPercent}
-                    onChange={e => setItemForm(f => ({ ...f, reservationistDiscountPercent: Number(e.target.value) }))} className={inputCls} />
-                </div>
-
-                {/* Child pax */}
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                  <p className="text-xs text-gray-500 mb-2 font-medium">Child Pax (optional)</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div><label className={labelCls}>Child Qty</label>
-                      <input type="number" min={0} value={itemForm.childQuantity}
-                        onChange={e => setItemForm(f => ({ ...f, childQuantity: Number(e.target.value) }))} className={inputCls} /></div>
-                    <div><label className={labelCls}>Child Rack Rate</label>
-                      <input type="number" min={0} step={0.01} value={itemForm.childRackRate}
-                        onChange={e => setItemForm(f => ({ ...f, childRackRate: Number(e.target.value) }))} className={inputCls} /></div>
-                    <div><label className={labelCls}>Child Cost Rate</label>
-                      <input type="number" min={0} step={0.01} value={itemForm.childCostRate}
-                        onChange={e => setItemForm(f => ({ ...f, childCostRate: Number(e.target.value) }))} className={inputCls} /></div>
-                  </div>
-                </div>
-
-                {/* Scheduling */}
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                  <p className="text-xs text-gray-500 mb-2 font-medium">Schedule (optional)</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><label className={labelCls}>Service Date</label>
-                      <input type="date" value={itemForm.serviceDate ?? ''}
-                        onChange={e => setItemForm(f => ({ ...f, serviceDate: e.target.value || null }))} className={inputCls} /></div>
-                    {itemForm.productType !== 'Accommodation' && (
-                      <div><label className={labelCls}>Start Time</label>
-                        <input type="time" value={itemForm.startTime ?? ''}
-                          onChange={e => setItemForm(f => ({ ...f, startTime: e.target.value || null }))} className={inputCls} /></div>
-                    )}
-                    {itemForm.productType !== 'Accommodation' && (
-                      <div><label className={labelCls}>Session Name</label>
-                        <input value={itemForm.sessionName ?? ''} placeholder="e.g. Morning, Sunset"
-                          onChange={e => setItemForm(f => ({ ...f, sessionName: e.target.value || null }))} className={inputCls} /></div>
-                    )}
-                    {itemForm.productType !== 'Accommodation' && (
-                      <div><label className={labelCls}>Meeting Point</label>
-                        <input value={itemForm.meetingPoint ?? ''} placeholder="e.g. Hotel lobby"
-                          onChange={e => setItemForm(f => ({ ...f, meetingPoint: e.target.value || null }))} className={inputCls} /></div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <div>
-                      <label className={labelCls}>Payment Handling</label>
-                      <select value={itemForm.paymentHandling}
-                        onChange={e => setItemForm(f => ({ ...f, paymentHandling: e.target.value }))} className={inputCls}>
-                        <option value="ThroughDMC">Through DMC (invoiced)</option>
-                        <option value="GuestPaysDirect">Guest Pays Direct (not invoiced)</option>
-                        <option value="ThroughAgent">Through Agent</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Notes</label>
-                      <input value={itemForm.notes ?? ''} placeholder="Driver notes, special instructions…"
-                        onChange={e => setItemForm(f => ({ ...f, notes: e.target.value || null }))} className={inputCls} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Price preview */}
-                {itemForm.rackRate > 0 && itemForm.quantity > 0 && (
-                  <div className="space-y-1 text-xs text-gray-500 bg-white dark:bg-gray-800 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span>Adults ({itemForm.quantity}): Rack <strong className="text-gray-700 dark:text-gray-300">{itemForm.rackRate.toFixed(2)}</strong></span>
-                      <span>→ Sell <strong className="text-blue-600">{sellingPreview.toFixed(2)}</strong></span>
-                      <span>→ Total <strong className="text-green-600">{totalPreview.toFixed(2)}</strong></span>
-                    </div>
-                    {itemForm.childQuantity > 0 && itemForm.childRackRate > 0 && (
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span>Children ({itemForm.childQuantity}): Rack <strong className="text-gray-700 dark:text-gray-300">{itemForm.childRackRate.toFixed(2)}</strong></span>
-                        <span>→ Total <strong className="text-green-600">{childTotalPreview.toFixed(2)}</strong></span>
-                      </div>
-                    )}
-                    {itemForm.childQuantity > 0 && itemForm.childRackRate > 0 && (
-                      <div className="font-medium pt-1 border-t border-gray-100 dark:border-gray-700">
-                        Grand Total: <strong className="text-green-700 dark:text-green-400">{grandTotalPreview.toFixed(2)}</strong>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <button onClick={() => addItem.mutate()} disabled={addItem.isPending || !canAddItem}
-                  className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {addItem.isPending ? 'Adding…' : '+ Add to Itinerary'}
-                </button>
-                {addItem.isError && <p className="text-xs text-red-500">{String(addItem.error)}</p>}
-              </div>
             </div>
 
             {/* ── PAYMENTS ── */}
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100">Payments</h4>
-                <div className="text-sm space-x-4">
+                <div className="flex items-center gap-3 text-sm flex-wrap">
                   <span className="text-gray-500">Invoice: <span className="font-medium text-gray-900 dark:text-gray-100">{fmtCurrency(detail.totalAmount, detail.currency)}</span></span>
                   <span className={detail.outstandingBalance > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}>
                     Outstanding: <span className="font-semibold">{fmtCurrency(detail.outstandingBalance, detail.currency)}</span>
                   </span>
+                  {detail.status !== 'Cancelled' && (
+                    <button onClick={() => setShowAddPayment(true)}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">
+                      + Record Payment
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -842,56 +704,284 @@ export function ReservationsPage() {
                 </div>
               )}
 
-              {/* Record payment form */}
-              {detail.status !== 'Cancelled' && (
-                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3 bg-gray-50 dark:bg-gray-800/50">
-                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Record Payment</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <div>
-                      <label className={labelCls}>Amount *</label>
-                      <input type="number" min={0.01} step={0.01} value={paymentForm.amount || ''}
-                        onChange={e => setPaymentForm(f => ({ ...f, amount: Number(e.target.value) }))}
-                        placeholder="0.00" className={inputCls} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Currency</label>
-                      <select value={paymentForm.currency} onChange={e => setPaymentForm(f => ({ ...f, currency: e.target.value }))} className={inputCls}>
-                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Method</label>
-                      <select value={paymentForm.paymentMethod} onChange={e => setPaymentForm(f => ({ ...f, paymentMethod: e.target.value }))} className={inputCls}>
-                        {PAYMENT_METHODS.map(m => <option key={m} value={m}>{pmLabel(m)}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Date *</label>
-                      <input type="date" value={paymentForm.paidAt}
-                        onChange={e => setPaymentForm(f => ({ ...f, paidAt: e.target.value }))} className={inputCls} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className={labelCls}>Reference</label>
-                      <input value={paymentForm.reference ?? ''} placeholder="Card ref, EFT ref, receipt #…"
-                        onChange={e => setPaymentForm(f => ({ ...f, reference: e.target.value || null }))} className={inputCls} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Notes</label>
-                      <input value={paymentForm.notes ?? ''} placeholder="Optional notes"
-                        onChange={e => setPaymentForm(f => ({ ...f, notes: e.target.value || null }))} className={inputCls} />
-                    </div>
-                  </div>
-                  <button onClick={() => addPayment.mutate()} disabled={addPayment.isPending || !canAddPayment}
-                    className="w-full py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
-                    {addPayment.isPending ? 'Recording…' : '+ Record Payment'}
-                  </button>
-                  {addPayment.isError && <p className="text-xs text-red-500">{String(addPayment.error)}</p>}
-                </div>
-              )}
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD ITEM MODAL ── */}
+      {showAddItem && detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Add Item</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{detail.reservationNumber} · {detail.guestName}</p>
+              </div>
+              <button onClick={() => { setShowAddItem(false); setItemForm(emptyItem) }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className={labelCls}>Type</label>
+                <select value={itemForm.productType}
+                  onChange={e => {
+                    const t = e.target.value
+                    const defaultUnit = t === 'Accommodation' ? 'nights' : t === 'Transfer' ? 'trips' : 'pax'
+                    setItemForm(f => ({ ...f, productType: t, productId: null, description: '', rackRate: 0, childRackRate: 0, unit: defaultUnit }))
+                  }}
+                  className={inputCls}>
+                  {PRODUCT_TYPES.map(t => <option key={t} value={t}>{ptLabel(t)}</option>)}
+                </select>
+              </div>
+
+              {itemForm.productType === 'Accommodation' && (
+                <div>
+                  <label className={labelCls}>Property Type</label>
+                  <select value={itemForm.productId ?? ''}
+                    onChange={e => {
+                      const pt = propertyTypes.find(x => x.id === e.target.value)
+                      setItemForm(f => ({ ...f, productId: e.target.value || null, description: pt ? pt.name : f.description, rackRate: pt ? pt.baseRatePerNight : f.rackRate, unit: 'nights' }))
+                    }}
+                    className={inputCls}>
+                    <option value="">Select…</option>
+                    {propertyTypes.filter(p => p.isActive).map(p => (
+                      <option key={p.id} value={p.id}>{p.name} — {detail.currency} {p.baseRatePerNight.toFixed(2)}/night</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {itemForm.productType === 'Activity' && (
+                <div>
+                  <label className={labelCls}>Activity</label>
+                  <select value={itemForm.productId ?? ''}
+                    onChange={e => {
+                      const a = activities.find(x => x.id === e.target.value)
+                      setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, unit: 'pax' }))
+                    }}
+                    className={inputCls}>
+                    <option value="">Select…</option>
+                    {activities.filter(a => a.isActive).map(a => (
+                      <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/pax</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {itemForm.productType === 'Transfer' && (
+                <div>
+                  <label className={labelCls}>Transfer</label>
+                  <select value={itemForm.productId ?? ''}
+                    onChange={e => {
+                      const a = transferActivities.find(x => x.id === e.target.value)
+                      setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, childRackRate: a?.childPricePerPerson ?? f.childRackRate, unit: 'trips' }))
+                    }}
+                    className={inputCls}>
+                    <option value="">Select transfer…</option>
+                    {transferActivities.filter(a => a.isActive).map(a => (
+                      <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/trip</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {itemForm.productType === 'ParkFee' && (
+                <div>
+                  <label className={labelCls}>Park Fee</label>
+                  <select value={itemForm.productId ?? ''}
+                    onChange={e => {
+                      const a = parkFeeActivities.find(x => x.id === e.target.value)
+                      setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, childRackRate: a?.childPricePerPerson ?? f.childRackRate, unit: 'pax' }))
+                    }}
+                    className={inputCls}>
+                    <option value="">Select…</option>
+                    {parkFeeActivities.filter(a => a.isActive).map(a => (
+                      <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/adult{a.childPricePerPerson ? ` · ${a.childPricePerPerson.toFixed(2)}/child` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {itemForm.productType === 'Helicopter' && (
+                <div>
+                  <label className={labelCls}>Helicopter Flight</label>
+                  <select value={itemForm.productId ?? ''}
+                    onChange={e => {
+                      const a = helicopterActivities.find(x => x.id === e.target.value)
+                      setItemForm(f => ({ ...f, productId: e.target.value || null, description: a ? a.name : f.description, rackRate: a ? a.pricePerPerson : f.rackRate, childRackRate: a?.childPricePerPerson ?? f.childRackRate, unit: 'pax' }))
+                    }}
+                    className={inputCls}>
+                    <option value="">Select…</option>
+                    {helicopterActivities.filter(a => a.isActive).map(a => (
+                      <option key={a.id} value={a.id}>{a.name} — {detail.currency} {a.pricePerPerson.toFixed(2)}/pax</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className={labelCls}>Description *</label>
+                <input value={itemForm.description} onChange={e => setItemForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="e.g. Sunset Cruise — 3 adults" className={inputCls} />
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                <div><label className={labelCls}>Qty *</label>
+                  <input type="number" min={0.01} step={0.01} value={itemForm.quantity}
+                    onChange={e => setItemForm(f => ({ ...f, quantity: Number(e.target.value) }))} className={inputCls} /></div>
+                <div><label className={labelCls}>Unit</label>
+                  <input list="units-list" value={itemForm.unit} onChange={e => setItemForm(f => ({ ...f, unit: e.target.value }))} className={inputCls} />
+                  <datalist id="units-list">{['nights', 'pax', 'trips', 'days', 'units'].map(u => <option key={u} value={u} />)}</datalist>
+                </div>
+                <div><label className={labelCls}>Rack Rate *</label>
+                  <input type="number" min={0} step={0.01} value={itemForm.rackRate}
+                    onChange={e => setItemForm(f => ({ ...f, rackRate: Number(e.target.value) }))} className={inputCls} /></div>
+                <div><label className={labelCls}>Cost Rate</label>
+                  <input type="number" min={0} step={0.01} value={itemForm.costRate}
+                    onChange={e => setItemForm(f => ({ ...f, costRate: Number(e.target.value) }))} className={inputCls} /></div>
+              </div>
+
+              <div>
+                <label className={labelCls}>Res. Discount %</label>
+                <input type="number" min={0} max={100} step={0.5} value={itemForm.reservationistDiscountPercent}
+                  onChange={e => setItemForm(f => ({ ...f, reservationistDiscountPercent: Number(e.target.value) }))} className={inputCls} />
+              </div>
+
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                <p className="text-xs text-gray-500 mb-2 font-medium">Child Pax (optional)</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div><label className={labelCls}>Child Qty</label>
+                    <input type="number" min={0} value={itemForm.childQuantity}
+                      onChange={e => setItemForm(f => ({ ...f, childQuantity: Number(e.target.value) }))} className={inputCls} /></div>
+                  <div><label className={labelCls}>Child Rack Rate</label>
+                    <input type="number" min={0} step={0.01} value={itemForm.childRackRate}
+                      onChange={e => setItemForm(f => ({ ...f, childRackRate: Number(e.target.value) }))} className={inputCls} /></div>
+                  <div><label className={labelCls}>Child Cost Rate</label>
+                    <input type="number" min={0} step={0.01} value={itemForm.childCostRate}
+                      onChange={e => setItemForm(f => ({ ...f, childCostRate: Number(e.target.value) }))} className={inputCls} /></div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                <p className="text-xs text-gray-500 mb-2 font-medium">Schedule (optional)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className={labelCls}>Service Date</label>
+                    <input type="date" value={itemForm.serviceDate ?? ''}
+                      onChange={e => setItemForm(f => ({ ...f, serviceDate: e.target.value || null }))} className={inputCls} /></div>
+                  {itemForm.productType !== 'Accommodation' && (<>
+                    <div><label className={labelCls}>Start Time</label>
+                      <input type="time" value={itemForm.startTime ?? ''}
+                        onChange={e => setItemForm(f => ({ ...f, startTime: e.target.value || null }))} className={inputCls} /></div>
+                    <div><label className={labelCls}>Session Name</label>
+                      <input value={itemForm.sessionName ?? ''} placeholder="e.g. Morning, Sunset"
+                        onChange={e => setItemForm(f => ({ ...f, sessionName: e.target.value || null }))} className={inputCls} /></div>
+                    <div><label className={labelCls}>Meeting Point</label>
+                      <input value={itemForm.meetingPoint ?? ''} placeholder="e.g. Hotel lobby"
+                        onChange={e => setItemForm(f => ({ ...f, meetingPoint: e.target.value || null }))} className={inputCls} /></div>
+                  </>)}
+                </div>
+                <div className="mt-2">
+                  <label className={labelCls}>Notes</label>
+                  <input value={itemForm.notes ?? ''} placeholder="Driver notes, special instructions…"
+                    onChange={e => setItemForm(f => ({ ...f, notes: e.target.value || null }))} className={inputCls} />
+                </div>
+              </div>
+
+              {itemForm.rackRate > 0 && itemForm.quantity > 0 && (
+                <div className="space-y-1 text-xs text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span>Adults ({itemForm.quantity}): Rack <strong className="text-gray-700 dark:text-gray-300">{itemForm.rackRate.toFixed(2)}</strong></span>
+                    <span>→ Sell <strong className="text-blue-600">{sellingPreview.toFixed(2)}</strong></span>
+                    <span>→ Total <strong className="text-green-600">{totalPreview.toFixed(2)}</strong></span>
+                  </div>
+                  {itemForm.childQuantity > 0 && itemForm.childRackRate > 0 && (<>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span>Children ({itemForm.childQuantity}): Rack <strong className="text-gray-700 dark:text-gray-300">{itemForm.childRackRate.toFixed(2)}</strong></span>
+                      <span>→ Total <strong className="text-green-600">{childTotalPreview.toFixed(2)}</strong></span>
+                    </div>
+                    <div className="font-medium pt-1 border-t border-gray-100 dark:border-gray-700">
+                      Grand Total: <strong className="text-green-700 dark:text-green-400">{grandTotalPreview.toFixed(2)}</strong>
+                    </div>
+                  </>)}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => { setShowAddItem(false); setItemForm(emptyItem) }}
+                  className="flex-1 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+                  Cancel
+                </button>
+                <button onClick={() => addItem.mutate()} disabled={addItem.isPending || !canAddItem}
+                  className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {addItem.isPending ? 'Adding…' : '+ Add to Itinerary'}
+                </button>
+              </div>
+              {addItem.isError && <p className="text-xs text-red-500">{String(addItem.error)}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── RECORD PAYMENT MODAL ── */}
+      {showAddPayment && detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Record Payment</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {detail.reservationNumber} · Outstanding: {fmtCurrency(detail.outstandingBalance, detail.currency)}
+                </p>
+              </div>
+              <button onClick={() => { setShowAddPayment(false); setPaymentForm(emptyPayment()) }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Amount *</label>
+                  <input type="number" min={0.01} step={0.01} value={paymentForm.amount || ''}
+                    onChange={e => setPaymentForm(f => ({ ...f, amount: Number(e.target.value) }))}
+                    placeholder="0.00" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Currency</label>
+                  <select value={paymentForm.currency} onChange={e => setPaymentForm(f => ({ ...f, currency: e.target.value }))} className={inputCls}>
+                    {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Method</label>
+                  <select value={paymentForm.paymentMethod} onChange={e => setPaymentForm(f => ({ ...f, paymentMethod: e.target.value }))} className={inputCls}>
+                    {PAYMENT_METHODS.map(m => <option key={m} value={m}>{pmLabel(m)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Date *</label>
+                  <input type="date" value={paymentForm.paidAt}
+                    onChange={e => setPaymentForm(f => ({ ...f, paidAt: e.target.value }))} className={inputCls} />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Reference</label>
+                <input value={paymentForm.reference ?? ''} placeholder="Card ref, EFT ref, receipt #…"
+                  onChange={e => setPaymentForm(f => ({ ...f, reference: e.target.value || null }))} className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Notes</label>
+                <input value={paymentForm.notes ?? ''} placeholder="Optional notes"
+                  onChange={e => setPaymentForm(f => ({ ...f, notes: e.target.value || null }))} className={inputCls} />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => { setShowAddPayment(false); setPaymentForm(emptyPayment()) }}
+                  className="flex-1 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+                  Cancel
+                </button>
+                <button onClick={() => addPayment.mutate()} disabled={addPayment.isPending || !canAddPayment}
+                  className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                  {addPayment.isPending ? 'Recording…' : '+ Record Payment'}
+                </button>
+              </div>
+              {addPayment.isError && <p className="text-xs text-red-500">{String(addPayment.error)}</p>}
+            </div>
           </div>
         </div>
       )}

@@ -43,9 +43,16 @@ export interface DriverRow {
   licenseNumber: string
   phone: string | null
   isActive: boolean
+  userId: string | null
+  isInternal: boolean
 }
 
-export type DriverPayload = Omit<DriverRow, 'id' | 'isActive'>
+export interface DriverPayload {
+  fullName: string
+  licenseNumber: string
+  phone: string | null
+  userId?: string | null
+}
 
 export async function getDrivers(search?: string): Promise<DriverRow[]> {
   const qs = search ? `?search=${encodeURIComponent(search)}` : ''
@@ -92,6 +99,11 @@ export async function createVehicleType(name: string): Promise<string> {
   return res.json()
 }
 
+export async function updateVehicleType(id: string, name: string): Promise<void> {
+  const res = await apiFetch(`/api/vehicle-types/${id}`, { method: 'POST', body: JSON.stringify({ name }) })
+  if (!res.ok) throw new Error('Failed to update vehicle type')
+}
+
 export async function toggleVehicleType(id: string): Promise<void> {
   const res = await apiFetch(`/api/vehicle-types/${id}/toggle`, { method: 'POST' })
   if (!res.ok) throw new Error('Failed to toggle vehicle type')
@@ -117,6 +129,11 @@ export async function createVehicleMake(name: string): Promise<string> {
     throw new Error((err as { message?: string }).message ?? 'Failed to create make')
   }
   return res.json()
+}
+
+export async function updateVehicleMake(id: string, name: string): Promise<void> {
+  const res = await apiFetch(`/api/vehicle-makes/${id}`, { method: 'POST', body: JSON.stringify({ name }) })
+  if (!res.ok) throw new Error('Failed to update make')
 }
 
 export async function toggleVehicleMake(id: string): Promise<void> {
@@ -150,6 +167,11 @@ export async function createVehicleModel(makeId: string, name: string): Promise<
     throw new Error((err as { message?: string }).message ?? 'Failed to create model')
   }
   return res.json()
+}
+
+export async function updateVehicleModel(id: string, name: string): Promise<void> {
+  const res = await apiFetch(`/api/vehicle-models/${id}`, { method: 'POST', body: JSON.stringify({ name }) })
+  if (!res.ok) throw new Error('Failed to update model')
 }
 
 export async function toggleVehicleModel(id: string): Promise<void> {
