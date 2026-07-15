@@ -211,7 +211,6 @@ export function FinancialPage() {
   }, [avg6MonthRev, growthRate, projectMonths])
 
   const totalProjectedRev   = projections.at(-1)?.cumulative ?? 0
-  const monthlyAddedRev     = (avg6MonthRev * bookingsPerVeh * numVehicles) / Math.max(revenueBookings.length / Math.max(months12.filter(k => (monthlyCountMap[k] ?? 0) > 0).length, 1), 1) * bookingsPerVeh
   const monthlyFleetCost    = numVehicles * (opCostPerVeh + driverSalary)
   const totalCapex          = numVehicles * vehicleCost
   const netMonthlyFromFleet = (avgValue * bookingsPerVeh * numVehicles) - monthlyFleetCost
