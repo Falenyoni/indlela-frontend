@@ -50,19 +50,21 @@ function NavContent({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
 
   return (
     <>
-      <div className="px-4 py-4 border-b border-gray-200 dark:border-gray-800 space-y-3">
-        <span className="text-lg font-bold" style={{ color: 'var(--color-primary)' }}>Indlela</span>
-        {user && (
-          <div className="space-y-1">
-            <p className="text-xs text-gray-400 dark:text-gray-500">Organization</p>
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-              {user.organizationName}
-            </p>
-            {user.roles.length > 0 && (
-              <p className="text-xs" style={{ color: 'var(--color-primary)' }}>{user.roles.join(', ')}</p>
-            )}
-          </div>
-        )}
+      {/* Logo area — standard 56px height for all orgs */}
+      <div className="h-14 px-4 border-b border-gray-200 dark:border-gray-800 flex items-center">
+        {user?.logoBase64
+          ? <img src={user.logoBase64} alt={user.organizationName} className="h-8 max-w-[136px] object-contain" />
+          : (
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
+                style={{ background: 'var(--color-primary)' }}>
+                {user?.organizationName?.[0]?.toUpperCase() ?? 'I'}
+              </div>
+              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
+                {user?.organizationName}
+              </span>
+            </div>
+          )}
       </div>
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
         {navItems.filter(isVisible).map((item) => (

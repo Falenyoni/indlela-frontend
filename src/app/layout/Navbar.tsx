@@ -32,13 +32,16 @@ export function Navbar({ onMenuClick }: NavbarProps) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:block">
-          {user?.organizationName}
-        </div>
       </div>
       <div className="flex items-center gap-3">
-        <div className="text-sm text-gray-700 dark:text-gray-300 hidden sm:block">{user?.fullName}</div>
-        <div className="h-8 w-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
+        <div className="hidden sm:block text-right">
+          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight">{user?.fullName}</p>
+          {user && user.roles.length > 0 && (
+            <p className="text-xs leading-tight" style={{ color: 'var(--color-primary)' }}>{user.roles.join(', ')}</p>
+          )}
+        </div>
+        <div className="h-8 w-8 rounded-full text-white flex items-center justify-center text-sm font-semibold shrink-0"
+          style={{ background: 'var(--color-primary)' }}>
           {initials}
         </div>
         <button

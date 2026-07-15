@@ -101,11 +101,10 @@ const labelCls = 'block text-xs text-gray-500 mb-1'
 const emptyForm: CreateBookingRequest = {
   guestId: '', guestName: '',
   agentId: null, agentName: null,
-  consultantName: '',
-  baseLocationId: null, baseLocationName: null,
+  consultantId: '', consultantName: '',
+  baseLocationId: null,
   travelStartDate: '', travelEndDate: '',
-  pax: 1, currency: 'ZAR', exchangeRate: 1,
-  reservationistDiscountPercent: 0,
+  adultPax: 1, childPax: 0, compAdultPax: 0, compChildPax: 0,
   notes: null, bookingSource: 'WalkIn',
   paymentHandling: 'ThroughDMC',
 }
@@ -122,6 +121,8 @@ const emptyItem: AddLineItemRequest = {
   childQuantity: 0,
   childRackRate: 0,
   childCostRate: 0,
+  compAdultQuantity: 0,
+  compChildQuantity: 0,
   serviceDate: null,
   startTime: null,
   sessionName: null,
@@ -129,10 +130,12 @@ const emptyItem: AddLineItemRequest = {
   notes: null,
 }
 
-const emptyPayment = (): RecordPaymentRequest => ({
+const emptyPayment = (detail?: { currency?: string; exchangeRate?: number; reservationistDiscountPercent?: number }): RecordPaymentRequest => ({
   bookingId: '',
   amount: 0,
-  currency: 'ZAR',
+  currency: detail?.currency ?? 'USD',
+  exchangeRate: detail?.exchangeRate ?? 1,
+  reservationistDiscountPercent: detail?.reservationistDiscountPercent ?? 0,
   paymentMethod: 'Cash',
   paidAt: new Date().toISOString().slice(0, 10),
   reference: null,
@@ -166,6 +169,7 @@ export function ReservationsPage() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [form, setForm] = useState<CreateBookingRequest>({
     ...emptyForm,
+    consultantId: isConsultant ? (user?.userId ?? '') : '',
     consultantName: isConsultant ? (user?.fullName ?? '') : '',
   })
   const [itemForm, setItemForm] = useState<AddLineItemRequest>(emptyItem)
@@ -269,7 +273,7 @@ export function ReservationsPage() {
 
   const addPayment = useMutation({
     mutationFn: () => recordPayment(detailId!, { ...paymentForm, bookingId: detailId! }),
-    onSuccess: () => { refetchDetail(); invalidate(); setPaymentForm(emptyPayment()); setShowAddPayment(false) },
+    onSuccess: () => { refetchDetail(); invalidate(); setPaymentForm(emptyPayment(detail ?? undefined)); setShowAddPayment(false) },
   })
 
   const openDetail = (id: string) => {
@@ -280,7 +284,7 @@ export function ReservationsPage() {
     setShowAddPayment(false)
   }
 
-  const canCreate = !!form.guestId && !!form.consultantName && !!form.travelStartDate && !!form.travelEndDate
+  const canCreate = !!form.guestId && !!form.consultantId && !!form.travelStartDate && !!form.travelEndDate
   const canAddItem = !!itemForm.description && itemForm.rackRate > 0 && itemForm.quantity > 0
   const canAddPayment = paymentForm.amount > 0 && !!paymentForm.paidAt
 
@@ -355,7 +359,12 @@ export function ReservationsPage() {
                 <td className="px-4 py-3 text-gray-500">{b.agentName ?? <span className="text-gray-300 dark:text-gray-600">—</span>}</td>
                 <td className="px-4 py-3 text-gray-500">{b.baseLocationName ?? <span className="text-gray-300 dark:text-gray-600">—</span>}</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{b.travelStartDate} → {b.travelEndDate}</td>
-                <td className="px-4 py-3 text-gray-500">{b.pax}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                  <span>{b.adultPax}A</span>
+                  {b.childPax > 0 && <span className="ml-1 text-amber-600">{b.childPax}C</span>}
+                  {b.compAdultPax > 0 && <span className="ml-1 text-purple-600">{b.compAdultPax}CA</span>}
+                  {b.compChildPax > 0 && <span className="ml-1 text-purple-600">{b.compChildPax}CC</span>}
+                </td>
                 <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{fmtCurrency(b.totalAmount, b.currency)}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[b.status] ?? ''}`}>{b.status}</span>
@@ -404,11 +413,11 @@ export function ReservationsPage() {
                 <input value={form.consultantName} readOnly
                   className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed" />
               ) : (
-                <select value={form.consultantName}
-                  onChange={e => setForm(f => ({ ...f, consultantName: e.target.value }))}
+                <select value={form.consultantId}
+                  onChange={e => { const c = consultants.find(x => x.id === e.target.value); setForm(f => ({ ...f, consultantId: e.target.value, consultantName: c?.fullName ?? '' })) }}
                   className={inputCls}>
                   <option value="">Select consultant…</option>
-                  {consultants.map(c => <option key={c.id} value={c.fullName}>{c.fullName}</option>)}
+                  {consultants.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
                 </select>
               )}
             </div>
@@ -433,7 +442,7 @@ export function ReservationsPage() {
             <div>
               <label className={labelCls}>Base Location</label>
               <select value={form.baseLocationId ?? ''}
-                onChange={e => { const l = locations.find(x => x.id === e.target.value); setForm(f => ({ ...f, baseLocationId: e.target.value || null, baseLocationName: l?.name ?? null })) }}
+                onChange={e => setForm(f => ({ ...f, baseLocationId: e.target.value || null }))}
                 className={inputCls}>
                 <option value="">None</option>
                 {locations.map(l => <option key={l.id} value={l.id}>{l.name} ({l.type})</option>)}
@@ -445,20 +454,14 @@ export function ReservationsPage() {
                 <input type="date" value={form.travelStartDate} onChange={e => setForm(f => ({ ...f, travelStartDate: e.target.value }))} className={inputCls} /></div>
               <div><label className={labelCls}>End Date *</label>
                 <input type="date" value={form.travelEndDate} onChange={e => setForm(f => ({ ...f, travelEndDate: e.target.value }))} className={inputCls} /></div>
-              <div><label className={labelCls}>Pax *</label>
-                <input type="number" min={1} value={form.pax} onChange={e => setForm(f => ({ ...f, pax: Number(e.target.value) }))} className={inputCls} /></div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div><label className={labelCls}>Currency</label>
-                <select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))} className={inputCls}>
-                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select></div>
-              <div><label className={labelCls}>Exchange Rate</label>
-                <input type="number" min={0} step={0.0001} value={form.exchangeRate} onChange={e => setForm(f => ({ ...f, exchangeRate: Number(e.target.value) }))} className={inputCls} /></div>
-              <div><label className={labelCls}>Res. Discount %</label>
-                <input type="number" min={0} max={100} step={0.5} value={form.reservationistDiscountPercent}
-                  onChange={e => setForm(f => ({ ...f, reservationistDiscountPercent: Number(e.target.value) }))} className={inputCls} /></div>
+              <div><label className={labelCls}>Adults *</label>
+                <input type="number" min={1} value={form.adultPax} onChange={e => setForm(f => ({ ...f, adultPax: Number(e.target.value) }))} className={inputCls} /></div>
+              <div><label className={labelCls}>Children</label>
+                <input type="number" min={0} value={form.childPax} onChange={e => setForm(f => ({ ...f, childPax: Number(e.target.value) }))} className={inputCls} /></div>
+              <div><label className={labelCls}>Comp Adults</label>
+                <input type="number" min={0} value={form.compAdultPax} onChange={e => setForm(f => ({ ...f, compAdultPax: Number(e.target.value) }))} className={inputCls} /></div>
+              <div><label className={labelCls}>Comp Children</label>
+                <input type="number" min={0} value={form.compChildPax} onChange={e => setForm(f => ({ ...f, compChildPax: Number(e.target.value) }))} className={inputCls} /></div>
             </div>
 
             <div>
@@ -508,7 +511,7 @@ export function ReservationsPage() {
               {[
                 ['Consultant', detail.consultantName],
                 ['Travel Dates', `${detail.travelStartDate} → ${detail.travelEndDate}`],
-                ['Pax', String(detail.pax)],
+                ['Pax', [detail.adultPax + 'A', detail.childPax > 0 ? detail.childPax + 'C' : '', detail.compAdultPax > 0 ? detail.compAdultPax + ' Comp Adult' : '', detail.compChildPax > 0 ? detail.compChildPax + ' Comp Child' : ''].filter(Boolean).join(' · ')],
                 ['Currency', `${detail.currency} (rate: ${detail.exchangeRate})`],
                 ...(detail.reservationistDiscountPercent > 0 ? [['Res. Discount', `${detail.reservationistDiscountPercent}%`]] : []),
               ].map(([label, value]) => (
@@ -613,7 +616,7 @@ export function ReservationsPage() {
                                 : item.sellingTotal.toFixed(2)}
                             </td>
                             <td className="px-3 py-2 text-gray-400">{item.costTotal.toFixed(2)}</td>
-                            <td className="px-3 py-2" rowSpan={item.childQuantity > 0 ? 2 : 1}>
+                            <td className="px-3 py-2" rowSpan={1 + (item.childQuantity > 0 ? 1 : 0) + (item.compAdultQuantity > 0 ? 1 : 0) + (item.compChildQuantity > 0 ? 1 : 0)}>
                               <button onClick={() => removeItem.mutate(item.id)} disabled={removeItem.isPending}
                                 className="text-red-500 hover:underline disabled:opacity-40">✕</button>
                             </td>
@@ -629,6 +632,32 @@ export function ReservationsPage() {
                               <td className="px-3 py-1.5 text-gray-500">{item.childSellingRate.toFixed(2)}</td>
                               <td className="px-3 py-1.5 font-medium text-gray-700 dark:text-gray-300">{item.childSellingTotal.toFixed(2)}</td>
                               <td className="px-3 py-1.5 text-gray-400">{item.childCostTotal.toFixed(2)}</td>
+                            </tr>
+                          )}
+                          {item.compAdultQuantity > 0 && (
+                            <tr className="bg-purple-50/50 dark:bg-purple-900/10">
+                              <td className="px-3 py-1.5">
+                                <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">Comp Adult</span>
+                              </td>
+                              <td className="px-3 py-1.5 text-gray-500 italic">{item.compAdultQuantity} complimentary</td>
+                              <td className="px-3 py-1.5 text-gray-500">{item.compAdultQuantity} {item.unit}</td>
+                              <td className="px-3 py-1.5 text-gray-400">—</td>
+                              <td className="px-3 py-1.5 text-gray-400">—</td>
+                              <td className="px-3 py-1.5 text-purple-600 dark:text-purple-400 font-medium">0.00</td>
+                              <td className="px-3 py-1.5 text-gray-400">0.00</td>
+                            </tr>
+                          )}
+                          {item.compChildQuantity > 0 && (
+                            <tr className="bg-purple-50/30 dark:bg-purple-900/5">
+                              <td className="px-3 py-1.5">
+                                <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">Comp Child</span>
+                              </td>
+                              <td className="px-3 py-1.5 text-gray-500 italic">{item.compChildQuantity} complimentary</td>
+                              <td className="px-3 py-1.5 text-gray-500">{item.compChildQuantity} {item.unit}</td>
+                              <td className="px-3 py-1.5 text-gray-400">—</td>
+                              <td className="px-3 py-1.5 text-gray-400">—</td>
+                              <td className="px-3 py-1.5 text-purple-600 dark:text-purple-400 font-medium">0.00</td>
+                              <td className="px-3 py-1.5 text-gray-400">0.00</td>
                             </tr>
                           )}
                         </React.Fragment>
@@ -662,7 +691,7 @@ export function ReservationsPage() {
                     Outstanding: <span className="font-semibold">{fmtCurrency(detail.outstandingBalance, detail.currency)}</span>
                   </span>
                   {detail.status !== 'Cancelled' && (
-                    <button onClick={() => setShowAddPayment(true)}
+                    <button onClick={() => { setPaymentForm(emptyPayment(detail)); setShowAddPayment(true) }}
                       className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">
                       + Record Payment
                     </button>
@@ -861,6 +890,18 @@ export function ReservationsPage() {
               </div>
 
               <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                <p className="text-xs text-gray-500 mb-2 font-medium">Complimentary Pax (optional — no charge)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className={labelCls}>Comp Adults</label>
+                    <input type="number" min={0} value={itemForm.compAdultQuantity}
+                      onChange={e => setItemForm(f => ({ ...f, compAdultQuantity: Number(e.target.value) }))} className={inputCls} /></div>
+                  <div><label className={labelCls}>Comp Children</label>
+                    <input type="number" min={0} value={itemForm.compChildQuantity}
+                      onChange={e => setItemForm(f => ({ ...f, compChildQuantity: Number(e.target.value) }))} className={inputCls} /></div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
                 <p className="text-xs text-gray-500 mb-2 font-medium">Schedule (optional)</p>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className={labelCls}>Service Date</label>
@@ -897,10 +938,17 @@ export function ReservationsPage() {
                       <span>Children ({itemForm.childQuantity}): Rack <strong className="text-gray-700 dark:text-gray-300">{itemForm.childRackRate.toFixed(2)}</strong></span>
                       <span>→ Total <strong className="text-green-600">{childTotalPreview.toFixed(2)}</strong></span>
                     </div>
+                  </>)}
+                  {(itemForm.compAdultQuantity > 0 || itemForm.compChildQuantity > 0) && (<>
+                    <div className="flex items-center gap-3 flex-wrap text-purple-600 dark:text-purple-400">
+                      <span>Comp: {itemForm.compAdultQuantity > 0 ? `${itemForm.compAdultQuantity} adult${itemForm.compAdultQuantity !== 1 ? 's' : ''}` : ''}{itemForm.compAdultQuantity > 0 && itemForm.compChildQuantity > 0 ? ' + ' : ''}{itemForm.compChildQuantity > 0 ? `${itemForm.compChildQuantity} child${itemForm.compChildQuantity !== 1 ? 'ren' : ''}` : ''} → <strong>No charge</strong></span>
+                    </div>
+                  </>)}
+                  {itemForm.childQuantity > 0 && itemForm.childRackRate > 0 && (
                     <div className="font-medium pt-1 border-t border-gray-100 dark:border-gray-700">
                       Grand Total: <strong className="text-green-700 dark:text-green-400">{grandTotalPreview.toFixed(2)}</strong>
                     </div>
-                  </>)}
+                  )}
                 </div>
               )}
 
@@ -947,6 +995,18 @@ export function ReservationsPage() {
                   <select value={paymentForm.currency} onChange={e => setPaymentForm(f => ({ ...f, currency: e.target.value }))} className={inputCls}>
                     {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                </div>
+                {paymentForm.currency !== 'USD' && (
+                  <div>
+                    <label className={labelCls}>Exchange Rate (to USD)</label>
+                    <input type="number" min={0} step={0.0001} value={paymentForm.exchangeRate}
+                      onChange={e => setPaymentForm(f => ({ ...f, exchangeRate: Number(e.target.value) }))} className={inputCls} />
+                  </div>
+                )}
+                <div>
+                  <label className={labelCls}>Res. Discount %</label>
+                  <input type="number" min={0} max={100} step={0.5} value={paymentForm.reservationistDiscountPercent}
+                    onChange={e => setPaymentForm(f => ({ ...f, reservationistDiscountPercent: Number(e.target.value) }))} className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Method</label>

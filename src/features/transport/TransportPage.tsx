@@ -34,13 +34,13 @@ export function TransportPage() {
   const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
     queryKey: ['vehicles'],
     queryFn: () => getVehicles(),
-    enabled: !!assigning && !assignForm.isSubcontracted,
+    enabled: !!assigning,
   })
 
   const { data: drivers = [], isLoading: driversLoading } = useQuery({
     queryKey: ['drivers'],
     queryFn: () => getDrivers(),
-    enabled: !!assigning && !assignForm.isSubcontracted,
+    enabled: !!assigning,
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['transfer-requests'] })
@@ -63,9 +63,7 @@ export function TransportPage() {
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false })
 
-  const canSubmitAssign = assignForm.isSubcontracted
-    ? !!assignForm.subcontractorName?.trim()
-    : !!(assignForm.vehicleId || assignForm.driverId)
+  const canSubmitAssign = !!(assignForm.vehicleId || assignForm.driverId)
 
   return (
     <div className="space-y-6">
@@ -122,18 +120,21 @@ export function TransportPage() {
                 <td className="px-4 py-3 font-mono text-xs text-gray-400">{r.reservationNumber}</td>
                 <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{r.guestName}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400 max-w-[220px] truncate">{r.description}</td>
-                <td className="px-4 py-3 text-gray-500">{r.pax}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                  <span>{r.adultPax}A</span>
+                  {r.childPax > 0 && <span className="ml-1 text-amber-600">{r.childPax}C</span>}
+                  {r.compAdultPax > 0 && <span className="ml-1 text-purple-600">{r.compAdultPax}CA</span>}
+                  {r.compChildPax > 0 && <span className="ml-1 text-purple-600">{r.compChildPax}CC</span>}
+                </td>
                 <td className="px-4 py-3">
-                  {r.isSubcontracted ? (
-                    <span className="text-xs text-purple-600 dark:text-purple-400">Sub: {r.subcontractorName}</span>
-                  ) : (r.vehicleId || r.driverId) ? (
+                  {(r.vehicleId || r.driverId) ? (
                     <div className="space-y-0.5">
+                      {r.vehicleRegistration
+                        ? <div className="text-xs font-mono font-medium text-gray-900 dark:text-gray-100">{r.vehicleRegistration}</div>
+                        : <div className="text-xs text-amber-500">No vehicle</div>}
                       {r.driverName
-                        ? <div className="text-xs text-gray-700 dark:text-gray-300">{r.driverName}</div>
+                        ? <div className="text-xs text-gray-500">{r.driverName}</div>
                         : <div className="text-xs text-amber-500">No driver</div>}
-                      {!r.vehicleId && (
-                        <div className="text-xs text-amber-500">No vehicle</div>
-                      )}
                     </div>
                   ) : (
                     <span className="text-xs text-gray-300 dark:text-gray-600 italic">Unassigned</span>
@@ -169,44 +170,28 @@ export function TransportPage() {
               <p className="text-sm text-gray-500 mt-0.5">{assigning.guestName} · {assigning.description}</p>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={assignForm.isSubcontracted}
-                onChange={e => setAssignForm({ isSubcontracted: e.target.checked })}
-                className="rounded text-blue-600 focus:ring-blue-500" />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Subcontracted (external provider)</span>
-            </label>
-
-            {assignForm.isSubcontracted ? (
+            <div className="space-y-3">
               <div>
-                <label className={labelCls}>Subcontractor Name *</label>
-                <input value={assignForm.subcontractorName ?? ''}
-                  onChange={e => setAssignForm(f => ({ ...f, subcontractorName: e.target.value }))}
-                  placeholder="e.g. Victoria Falls Transfers" className={inputCls} />
+                <label className={labelCls}>Vehicle</label>
+                <select value={assignForm.vehicleId ?? ''} onChange={e => setAssignForm(f => ({ ...f, vehicleId: e.target.value || undefined }))} className={inputCls} disabled={vehiclesLoading}>
+                  <option value="">{vehiclesLoading ? 'Loading…' : vehicles.filter(v => v.isActive).length === 0 ? 'No vehicles — add in Settings' : 'Select vehicle…'}</option>
+                  {vehicles.filter(v => v.isActive).map(v => (
+                    <option key={v.id} value={v.id}>{v.registration} — {v.make} {v.model} ({v.vehicleType}, {v.capacity} pax)</option>
+                  ))}
+                </select>
               </div>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <label className={labelCls}>Vehicle</label>
-                  <select value={assignForm.vehicleId ?? ''} onChange={e => setAssignForm(f => ({ ...f, vehicleId: e.target.value || undefined }))} className={inputCls} disabled={vehiclesLoading}>
-                    <option value="">{vehiclesLoading ? 'Loading…' : vehicles.filter(v => v.isActive).length === 0 ? 'No vehicles — add in Settings' : 'Select vehicle…'}</option>
-                    {vehicles.filter(v => v.isActive).map(v => (
-                      <option key={v.id} value={v.id}>{v.registration} — {v.make} {v.model} ({v.vehicleType}, {v.capacity} pax)</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Driver</label>
-                  <select value={assignForm.driverId ?? ''} onChange={e => setAssignForm(f => ({ ...f, driverId: e.target.value || undefined }))} className={inputCls} disabled={driversLoading}>
-                    <option value="">{driversLoading ? 'Loading…' : drivers.filter(d => d.isActive).length === 0 ? 'No drivers — add in Settings' : 'Select driver…'}</option>
-                    {drivers.filter(d => d.isActive).map(d => (
-                      <option key={d.id} value={d.id}>{d.isInternal ? '● ' : '○ '}{d.fullName} ({d.licenseNumber}){d.isInternal ? ' — Internal' : ' — Subcontracted'}</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className={labelCls}>Driver</label>
+                <select value={assignForm.driverId ?? ''} onChange={e => setAssignForm(f => ({ ...f, driverId: e.target.value || undefined }))} className={inputCls} disabled={driversLoading}>
+                  <option value="">{driversLoading ? 'Loading…' : drivers.filter(d => d.isActive).length === 0 ? 'No drivers — add in Settings' : 'Select driver…'}</option>
+                  {drivers.filter(d => d.isActive).map(d => (
+                    <option key={d.id} value={d.id}>{d.isInternal ? '● ' : '○ '}{d.fullName} ({d.licenseNumber}){d.isInternal ? ' — Internal' : ' — Subcontracted'}</option>
+                  ))}
+                </select>
               </div>
-            )}
+            </div>
 
-            {!assignForm.isSubcontracted && canSubmitAssign && (!assignForm.vehicleId || !assignForm.driverId) && (
+            {canSubmitAssign && (!assignForm.vehicleId || !assignForm.driverId) && (
               <p className="text-xs text-amber-500">
                 {!assignForm.vehicleId ? 'No vehicle selected — remember to assign one before pickup.' : 'No driver selected — remember to assign one before pickup.'}
               </p>

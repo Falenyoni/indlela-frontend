@@ -187,8 +187,12 @@ export interface TransferRequestRow {
   guestName: string
   description: string
   pickupTime: string
-  pax: number
+  adultPax: number
+  childPax: number
+  compAdultPax: number
+  compChildPax: number
   vehicleId: string | null
+  vehicleRegistration: string | null
   driverId: string | null
   driverName: string | null
   isSubcontracted: boolean

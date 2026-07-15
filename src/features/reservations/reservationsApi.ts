@@ -6,11 +6,15 @@ export interface BookingRow {
   guestId: string
   guestName: string
   agentName: string | null
+  consultantId: string
   consultantName: string
   baseLocationName: string | null
   travelStartDate: string
   travelEndDate: string
-  pax: number
+  adultPax: number
+  childPax: number
+  compAdultPax: number
+  compChildPax: number
   currency: string
   totalAmount: number
   status: string
@@ -37,6 +41,8 @@ export interface LineItemDto {
   childSellingTotal: number
   childCostRate: number
   childCostTotal: number
+  compAdultQuantity: number
+  compChildQuantity: number
   serviceDate: string | null
   startTime: string | null
   sessionName: string | null
@@ -63,12 +69,16 @@ export interface BookingDetail {
   guestName: string
   agentId: string | null
   agentName: string | null
+  consultantId: string
   consultantName: string
   baseLocationId: string | null
   baseLocationName: string | null
   travelStartDate: string
   travelEndDate: string
-  pax: number
+  adultPax: number
+  childPax: number
+  compAdultPax: number
+  compChildPax: number
   currency: string
   exchangeRate: number
   reservationistDiscountPercent: number
@@ -87,15 +97,15 @@ export interface CreateBookingRequest {
   guestName: string
   agentId: string | null
   agentName: string | null
+  consultantId: string
   consultantName: string
   baseLocationId: string | null
-  baseLocationName: string | null
   travelStartDate: string
   travelEndDate: string
-  pax: number
-  currency: string
-  exchangeRate: number
-  reservationistDiscountPercent: number
+  adultPax: number
+  childPax: number
+  compAdultPax: number
+  compChildPax: number
   notes: string | null
   bookingSource: string
   paymentHandling: string
@@ -124,6 +134,8 @@ export interface AddLineItemRequest {
   childQuantity: number
   childRackRate: number
   childCostRate: number
+  compAdultQuantity: number
+  compChildQuantity: number
   serviceDate: string | null
   startTime: string | null
   sessionName: string | null
@@ -135,6 +147,8 @@ export interface RecordPaymentRequest {
   bookingId: string
   amount: number
   currency: string
+  exchangeRate: number
+  reservationistDiscountPercent: number
   paymentMethod: string
   paidAt: string
   reference: string | null
