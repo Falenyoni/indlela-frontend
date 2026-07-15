@@ -1,5 +1,24 @@
 import { apiFetch } from '@/shared/lib/api/apiFetch'
 
+// ── Branding ──────────────────────────────────────────────────────────────────
+
+export interface BrandingDto {
+  organizationName: string
+  primaryColor: string | null
+  logoBase64: string | null
+}
+
+export async function getBranding(): Promise<BrandingDto> {
+  const res = await apiFetch('/api/branding')
+  if (!res.ok) throw new Error('Failed to load branding')
+  return res.json()
+}
+
+export async function updateBranding(data: { primaryColor: string | null; logoBase64?: string | null }): Promise<void> {
+  const res = await apiFetch('/api/branding', { method: 'POST', body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to save branding')
+}
+
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export interface UserRow {

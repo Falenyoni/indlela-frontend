@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getUsers, createUser, updateUser, assignUserRoles,
   getRoles, createRole, updateRole, getPermissions,
+  updateBranding as updateBrandingApi,
   type UserRow, type RoleRow,
 } from './settingsApi'
+import { useAuth } from '@/shared/lib/auth/AuthContext'
 import {
   getVehicleTypes, createVehicleType, updateVehicleType, toggleVehicleType,
   getVehicleMakes, createVehicleMake, updateVehicleMake, toggleVehicleMake,
@@ -1054,12 +1056,136 @@ function DriversTab() {
   )
 }
 
+// ── Branding Tab ─────────────────────────────────────────────────────────────
+
+function BrandingTab() {
+  const { user, updateBranding } = useAuth()
+  const qc = useQueryClient()
+
+  const [primaryColor, setPrimaryColor] = useState(user?.primaryColor ?? '#3b82f6')
+  const [logoPreview, setLogoPreview]   = useState<string | null>(user?.logoBase64 ?? null)
+  const [logoBase64, setLogoBase64]     = useState<string | null>(null)
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 500_000) { alert('Logo must be under 500 KB'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      setLogoPreview(result)
+      setLogoBase64(result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const save = useMutation({
+    mutationFn: () => updateBrandingApi({
+      primaryColor,
+      // only send logoBase64 when changed; null means "clear logo", undefined means "keep existing"
+      logoBase64: logoBase64 === '' ? null : (logoBase64 ?? undefined),
+    }),
+    onSuccess: () => {
+      const newLogo = logoBase64 === '' ? null : (logoBase64 ?? user?.logoBase64 ?? null)
+      updateBranding(primaryColor, newLogo)
+      qc.invalidateQueries({ queryKey: ['branding'] })
+    },
+  })
+
+  const PRESET_COLORS = ['#3b82f6','#6366f1','#8b5cf6','#ec4899','#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#0ea5e9','#1d4ed8','#111827']
+
+  return (
+    <div className="max-w-xl space-y-8">
+      <div>
+        <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">Branding</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Customise how your organisation appears in the app.</p>
+      </div>
+
+      {/* Logo */}
+      <div className="space-y-3">
+        <label className={labelCls}>Organisation Logo</label>
+        <div className="flex items-center gap-4">
+          <div className="w-32 h-16 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center bg-gray-50 dark:bg-gray-800 overflow-hidden">
+            {logoPreview
+              ? <img src={logoPreview} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
+              : <span className="text-xs text-gray-400">No logo</span>
+            }
+          </div>
+          <div className="space-y-2">
+            <label className="cursor-pointer px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+              Upload logo
+              <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={handleFile} className="sr-only" />
+            </label>
+            {logoPreview && (
+              <button onClick={() => { setLogoPreview(null); setLogoBase64('') }}
+                className="block text-xs text-red-500 hover:underline">
+                Remove
+              </button>
+            )}
+            <p className="text-xs text-gray-400">PNG, SVG or JPEG · max 500 KB</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Primary colour */}
+      <div className="space-y-3">
+        <label className={labelCls}>Primary Colour</label>
+        <div className="flex flex-wrap gap-2">
+          {PRESET_COLORS.map(c => (
+            <button key={c} onClick={() => setPrimaryColor(c)}
+              className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${primaryColor === c ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent'}`}
+              style={{ background: c }} />
+          ))}
+          <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
+            className="w-7 h-7 rounded-full cursor-pointer border border-gray-300 dark:border-gray-600 p-0.5 bg-transparent"
+            title="Custom colour" />
+        </div>
+        <p className="text-xs text-gray-400">Selected: <code className="font-mono">{primaryColor}</code></p>
+      </div>
+
+      {/* Live preview */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800">Preview</div>
+        <div className="p-4 space-y-3 bg-white dark:bg-gray-900">
+          <div className="flex items-center gap-3">
+            {logoPreview
+              ? <img src={logoPreview} alt="Logo preview" className="h-8 object-contain" />
+              : <span className="text-sm font-bold" style={{ color: primaryColor }}>{user?.organizationName}</span>
+            }
+          </div>
+          <div className="flex gap-2">
+            <button className="px-3 py-1.5 rounded-lg text-sm font-medium text-white" style={{ background: primaryColor }}>
+              Primary button
+            </button>
+            <button className="px-3 py-1.5 rounded-lg text-sm font-medium border" style={{ borderColor: primaryColor, color: primaryColor }}>
+              Outline button
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="w-2 h-2 rounded-full" style={{ background: primaryColor }} />
+            <span className="text-gray-700 dark:text-gray-300">Active nav item</span>
+          </div>
+        </div>
+      </div>
+
+      <button onClick={() => save.mutate()} disabled={save.isPending}
+        className="px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+        style={{ background: primaryColor }}>
+        {save.isPending ? 'Saving…' : 'Save Branding'}
+      </button>
+      {save.isError && <p className="text-xs text-red-500 mt-2">{String(save.error)}</p>}
+      {save.isSuccess && <p className="text-xs text-green-600 dark:text-green-400 mt-2">Branding saved — changes apply immediately.</p>}
+    </div>
+  )
+}
+
 // ── SettingsPage ──────────────────────────────────────────────────────────────
 
 type Tab =
   | 'users' | 'roles'
   | 'activities' | 'properties' | 'suppliers' | 'agents' | 'locations'
   | 'fleet' | 'drivers' | 'fleet-setup'
+  | 'branding'
 
 const TAB_GROUPS = [
   {
@@ -1085,6 +1211,12 @@ const TAB_GROUPS = [
       { id: 'fleet',       label: 'Fleet' },
       { id: 'drivers',     label: 'Drivers' },
       { id: 'fleet-setup', label: 'Fleet Setup' },
+    ],
+  },
+  {
+    label: 'Organisation',
+    tabs: [
+      { id: 'branding', label: 'Branding' },
     ],
   },
 ] as const
@@ -1132,6 +1264,7 @@ export function SettingsPage() {
       {tab === 'fleet'       && <FleetTab />}
       {tab === 'drivers'     && <DriversTab />}
       {tab === 'fleet-setup' && <FleetSetupTab />}
+      {tab === 'branding'    && <BrandingTab />}
     </div>
   )
 }
