@@ -91,7 +91,7 @@ export function ReportingPage() {
   const revenue       = filtered.filter(r => r.status === 'Completed' || r.status === 'InProgress').reduce((s, r) => s + r.totalAmount, 0)
   const inProgress    = filtered.filter(r => r.status === 'InProgress').length
   const confirmed     = filtered.filter(r => r.status === 'Confirmed').length
-  const totalPax      = filtered.reduce((s, r) => s + r.pax, 0)
+  const totalPax      = filtered.reduce((s, r) => s + r.adultPax + r.childPax, 0)
 
   const byStatus = STATUSES.slice(1).map(s => ({
     status: s,
@@ -254,7 +254,7 @@ export function ReportingPage() {
                       <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{r.guestName}</td>
                       <td className="px-3 py-2 text-gray-500">{r.agentName ?? '—'}</td>
                       <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{r.travelStartDate} → {r.travelEndDate}</td>
-                      <td className="px-3 py-2 text-gray-500 tabular-nums">{r.pax}</td>
+                      <td className="px-3 py-2 text-gray-500 tabular-nums">{r.adultPax + r.childPax}</td>
                       <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 tabular-nums">{r.currency} {r.totalAmount.toFixed(2)}</td>
                       <td className="px-3 py-2">
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium"

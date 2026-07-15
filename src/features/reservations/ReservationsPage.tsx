@@ -333,9 +333,9 @@ export function ReservationsPage() {
     ? bookings.filter((b: BookingRow) => b.travelStartDate <= periodRange.to && b.travelEndDate >= periodRange.from)
     : bookings
 
-  const sellingPreview = computeSellingRate(itemForm.rackRate, itemForm.reservationistDiscountPercent)
+  const sellingPreview = computeSellingRate(itemForm.rackRate, 0)
   const totalPreview = sellingPreview * itemForm.quantity
-  const childSellingPreview = computeSellingRate(itemForm.childRackRate, itemForm.reservationistDiscountPercent)
+  const childSellingPreview = computeSellingRate(itemForm.childRackRate, 0)
   const childTotalPreview = childSellingPreview * itemForm.childQuantity
   const grandTotalPreview = totalPreview + childTotalPreview
 
