@@ -254,7 +254,7 @@ export function FleetReportTab() {
         headStyles: { fillColor: [59, 130, 246] },
       })
 
-      const y1 = (doc as any).lastAutoTable?.finalY + 10 ?? 90
+      const y1 = ((doc as any).lastAutoTable?.finalY ?? 80) + 10
       doc.setFontSize(12)
       doc.text('Per-Vehicle Breakdown', 14, y1)
       autoTable(doc, {
@@ -274,7 +274,7 @@ export function FleetReportTab() {
         bodyStyles: { fontSize: 9 },
       })
 
-      const y2 = (doc as any).lastAutoTable?.finalY + 8 ?? 180
+      const y2 = ((doc as any).lastAutoTable?.finalY ?? 172) + 8
       doc.setFontSize(9)
       doc.setTextColor(120)
       doc.text(`Fleet total: ${fmtR(totalFleetKm * fuelRate)}  ·  Fuel rate: R${fuelRate}/km (estimate only)`, 14, y2)

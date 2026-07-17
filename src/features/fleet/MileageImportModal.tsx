@@ -13,7 +13,7 @@ const COLUMNS = [
 
 export function MileageImportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess?: () => void }) {
   const qc = useQueryClient()
-  const { data: vehicles = [], isLoading } = useQuery({
+  const { data: vehicles = [] } = useQuery({
     queryKey: ['vehicles-mileage-import'],
     queryFn: () => getVehicles(),
   })
