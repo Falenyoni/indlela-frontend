@@ -17,6 +17,8 @@ import {
   type VehicleRow, type VehiclePayload, type DriverRow, type DriverPayload,
 } from '../transport/transportApi'
 import { ActivitiesPage } from '../activities/ActivitiesPage'
+import { AuditLogTab } from '../audit/AuditLogTab'
+import { UserImportModal } from './UserImportModal'
 import { PropertiesPage } from '../properties/PropertiesPage'
 import { SuppliersPage } from '../suppliers/SuppliersPage'
 import { AgentsPage } from '../agents/AgentsPage'
@@ -63,6 +65,7 @@ function UsersTab({ roles }: { roles: RoleRow[] }) {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [createForm, setCreateForm] = useState(emptyCreate)
   const [editUser, setEditUser] = useState<UserRow | null>(null)
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', isActive: true })
@@ -118,10 +121,16 @@ function UsersTab({ roles }: { roles: RoleRow[] }) {
       <div className="flex items-center justify-between mb-4">
         <input placeholder="Search users…" value={search} onChange={e => setSearch(e.target.value)}
           className={`${inputCls} max-w-sm`} />
-        <button onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          + Add User
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+            ↑ Import
+          </button>
+          <button onClick={() => setShowCreate(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            + Add User
+          </button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -170,6 +179,8 @@ function UsersTab({ roles }: { roles: RoleRow[] }) {
           {users.length} user{users.length !== 1 ? 's' : ''}
         </div>
       </div>
+
+      {showImport && <UserImportModal roles={roles} onClose={() => setShowImport(false)} />}
 
       {/* Create User Modal */}
       {showCreate && (
@@ -1215,6 +1226,7 @@ type Tab =
   | 'activities' | 'properties' | 'suppliers' | 'agents' | 'locations'
   | 'fleet' | 'drivers' | 'fleet-setup'
   | 'branding'
+  | 'audit-log'
 
 const TAB_GROUPS = [
   {
@@ -1245,7 +1257,8 @@ const TAB_GROUPS = [
   {
     label: 'Organisation',
     tabs: [
-      { id: 'branding', label: 'Branding' },
+      { id: 'branding',   label: 'Branding' },
+      { id: 'audit-log',  label: 'Audit Log' },
     ],
   },
 ] as const
@@ -1294,6 +1307,7 @@ export function SettingsPage() {
       {tab === 'drivers'     && <DriversTab />}
       {tab === 'fleet-setup' && <FleetSetupTab />}
       {tab === 'branding'    && <BrandingTab />}
+      {tab === 'audit-log'  && <AuditLogTab />}
     </div>
   )
 }

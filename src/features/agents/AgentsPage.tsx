@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { AgentImportModal } from './AgentImportModal'
 import {
   getAgents, createAgent, updateAgent, toggleAgent,
   getAgentRateSheets, createAgentRateSheet, updateAgentRateSheet, toggleAgentRateSheet,
@@ -29,6 +30,7 @@ function AgentsTab() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [editing, setEditing] = useState<AgentRow | null>(null)
   const [form, setForm] = useState<AgentPayload>(emptyAgent)
 
@@ -61,9 +63,14 @@ function AgentsTab() {
     <>
       <div className="flex items-center justify-between gap-3">
         <input placeholder="Search agents…" value={search} onChange={e => setSearch(e.target.value)} className={inputCls + ' max-w-sm'} />
-        <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shrink-0">
-          + Add Agent
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 shrink-0">
+            ↑ Import
+          </button>
+          <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shrink-0">
+            + Add Agent
+          </button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-x-auto">
@@ -111,6 +118,8 @@ function AgentsTab() {
         </table>
         <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-400">{agents.length} agent{agents.length !== 1 ? 's' : ''}</div>
       </div>
+
+      {showImport && <AgentImportModal onClose={() => setShowImport(false)} />}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

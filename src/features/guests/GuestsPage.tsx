@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getGuests, getGuestById, registerGuest, updateGuest, type GuestRow, type RegisterGuestRequest } from './guestsApi'
+import { GuestImportModal } from './GuestImportModal'
 
 const GENDERS = ['Male', 'Female', 'Other']
 const DOC_TYPES = ['Passport', 'NationalId']
@@ -21,6 +22,7 @@ export function GuestsPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [showRegister, setShowRegister] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [form, setForm] = useState<RegisterGuestRequest>(emptyForm)
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -109,10 +111,16 @@ export function GuestsPage() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Guests</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Traveller profiles and document records</p>
         </div>
-        <button onClick={() => setShowRegister(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          + Register Guest
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+            ↑ Import
+          </button>
+          <button onClick={() => setShowRegister(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            + Register Guest
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-3">
@@ -224,6 +232,8 @@ export function GuestsPage() {
           </div>
         </div>
       )}
+
+      {showImport && <GuestImportModal onClose={() => setShowImport(false)} />}
 
       {showRegister && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

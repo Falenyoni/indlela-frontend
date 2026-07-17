@@ -25,7 +25,8 @@ export const Permissions = {
     View: 'reports.view',
   },
   Settings: {
-    Users: 'settings.users',
+    Users:    'settings.users',
+    AuditLog: 'settings.audit_log',
   },
   ServiceLogs: {
     Manage: 'service_logs.manage',

@@ -178,7 +178,7 @@ export async function createReservation(data: CreateBookingRequest): Promise<{ r
   const res = await apiFetch('/api/reservations', { method: 'POST', body: JSON.stringify(data) })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message ?? 'Failed to create booking')
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to create booking')
   }
   return res.json()
 }
@@ -190,7 +190,7 @@ export async function addLineItem(bookingId: string, data: AddLineItemRequest): 
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message ?? 'Failed to add line item')
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to add line item')
   }
   return res.json()
 }
@@ -207,7 +207,7 @@ export async function recordPayment(bookingId: string, data: RecordPaymentReques
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message ?? 'Failed to record payment')
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to record payment')
   }
   return res.json()
 }
@@ -264,7 +264,7 @@ export async function requestDiscount(bookingId: string, itemId: string, request
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message ?? 'Failed to submit discount request')
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to submit discount request')
   }
   return res.json()
 }

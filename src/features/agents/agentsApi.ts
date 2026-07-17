@@ -24,7 +24,10 @@ export async function getAgents(search?: string): Promise<AgentRow[]> {
 
 export async function createAgent(data: AgentPayload): Promise<void> {
   const res = await apiFetch('/api/agents', { method: 'POST', body: JSON.stringify(data) })
-  if (!res.ok) throw new Error('Failed to create agent')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to create agent')
+  }
 }
 
 export async function updateAgent(id: string, data: AgentPayload): Promise<void> {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ReservationImportModal } from './ReservationImportModal'
 import {
   getReservations, createReservation, getReservationById,
   addLineItem, removeLineItem, recordPayment, updateLineItemDiscount,
@@ -163,6 +164,7 @@ export function ReservationsPage() {
   const isConsultant = hasPermission(Permissions.Bookings.ViewOwn) && !isSupervisorOrAbove
 
   const [statusFilter, setStatusFilter] = useState('')
+  const [showImport, setShowImport] = useState(false)
   const [datePeriod, setDatePeriod] = useState<DatePeriod>('')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -347,10 +349,16 @@ export function ReservationsPage() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Bookings</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tour itineraries and travel bookings</p>
         </div>
-        <button onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          + New Booking
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+            ↑ Import
+          </button>
+          <button onClick={() => setShowCreate(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            + New Booking
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -417,6 +425,8 @@ export function ReservationsPage() {
           </tbody>
         </table>
       </div>
+
+      {showImport && <ReservationImportModal onClose={() => setShowImport(false)} />}
 
       {/* Create Booking Modal */}
       {showCreate && (

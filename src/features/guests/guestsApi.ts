@@ -63,7 +63,7 @@ export async function registerGuest(data: RegisterGuestRequest): Promise<GuestRo
   const res = await apiFetch('/api/guests', { method: 'POST', body: JSON.stringify(data) })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message ?? 'Failed to register guest')
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to register guest')
   }
   return res.json()
 }

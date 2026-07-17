@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getActivities, createActivity, updateActivity, toggleActivity, type ActivityRow } from './activitiesApi'
+import { ActivityImportModal } from './ActivityImportModal'
 
 const CATEGORIES = ['Adventure', 'Cultural', 'Wellness', 'Dining', 'Transfer', 'ParkFee', 'Helicopter', 'Other']
 
@@ -32,6 +33,7 @@ export function ActivitiesPage() {
   const qc = useQueryClient()
   const { data: activities = [] } = useQuery({ queryKey: ['activities'], queryFn: () => getActivities() })
   const [modal, setModal] = useState<null | 'add' | ActivityRow>(null)
+  const [showImport, setShowImport] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm)
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['activities'] })
@@ -86,9 +88,14 @@ export function ActivitiesPage() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Activities</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage bookable activities and pricing</p>
         </div>
-        <button onClick={() => openModal('add')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          + Add Activity
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+            ↑ Import
+          </button>
+          <button onClick={() => openModal('add')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            + Add Activity
+          </button>
+        </div>
       </div>
 
       {CATEGORIES.filter(cat => grouped[cat].length > 0).map(cat => (
@@ -143,6 +150,8 @@ export function ActivitiesPage() {
           No activities yet. Add your first activity to get started.
         </div>
       )}
+
+      {showImport && <ActivityImportModal onClose={() => setShowImport(false)} />}
 
       {modal !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

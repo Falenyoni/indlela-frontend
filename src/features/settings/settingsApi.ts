@@ -48,7 +48,7 @@ export async function createUser(data: {
   const res = await apiFetch('/api/users', { method: 'POST', body: JSON.stringify(data) })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message ?? 'Failed to create user')
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to create user')
   }
   return res.json()
 }
@@ -95,7 +95,7 @@ export async function createRole(data: {
   const res = await apiFetch('/api/roles', { method: 'POST', body: JSON.stringify(data) })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.message ?? 'Failed to create role')
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to create role')
   }
   return res.json()
 }

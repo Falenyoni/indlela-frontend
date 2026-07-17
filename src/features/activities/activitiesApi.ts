@@ -41,7 +41,10 @@ export async function getActivities(category?: string): Promise<ActivityRow[]> {
 
 export async function createActivity(data: Omit<ActivityRow, 'id' | 'isActive'>): Promise<void> {
   const res = await apiFetch('/api/activities', { method: 'POST', body: JSON.stringify(data) })
-  if (!res.ok) throw new Error('Failed to create activity')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.detail ?? err?.message ?? 'Failed to create activity')
+  }
 }
 
 export async function updateActivity(id: string, data: Omit<ActivityRow, 'id' | 'isActive'>): Promise<void> {
