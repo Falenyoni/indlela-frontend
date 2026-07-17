@@ -16,6 +16,14 @@ import {
   type VehicleMakeRow, type VehicleModelRow,
   type VehicleRow, type VehiclePayload, type DriverRow, type DriverPayload,
 } from '../transport/transportApi'
+import {
+  getFleetServiceStatus, logOdometerReading, recordService,
+  type VehicleServiceStatus,
+} from '../fleet/fleetApi'
+import { MileageImportModal } from '../fleet/MileageImportModal'
+import { VehicleImportModal } from '../transport/VehicleImportModal'
+import { DriverImportModal } from '../transport/DriverImportModal'
+import { FleetSetupImportModal } from '../transport/FleetSetupImportModal'
 import { ActivitiesPage } from '../activities/ActivitiesPage'
 import { AuditLogTab } from '../audit/AuditLogTab'
 import { UserImportModal } from './UserImportModal'
@@ -606,6 +614,7 @@ function RefList({
 
 function FleetSetupTab() {
   const qc = useQueryClient()
+  const [showImport, setShowImport] = useState(false)
   const [selectedMake, setSelectedMake] = useState<VehicleMakeRow | null>(null)
   const [newTypeName, setNewTypeName] = useState('')
   const [newMakeName, setNewMakeName] = useState('')
@@ -672,6 +681,14 @@ function FleetSetupTab() {
 
   return (
     <div className="space-y-8">
+      <div className="flex justify-end">
+        <button onClick={() => setShowImport(true)}
+          className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+          ↑ Import
+        </button>
+      </div>
+      {showImport && <FleetSetupImportModal onClose={() => setShowImport(false)} />}
+
       {/* Vehicle Types — full width */}
       <RefList
         title="Vehicle Types"
@@ -812,6 +829,17 @@ function FleetSetupTab() {
 
 const emptyVehicle: VehiclePayload = { registration: '', make: '', model: '', vehicleType: '', capacity: 1 }
 
+const SERVICE_STATUS_STYLES: Record<string, string> = {
+  Ok:       'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+  DueSoon:  'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+  Overdue:  'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+}
+const SERVICE_STATUS_LABEL: Record<string, string> = {
+  Ok: 'OK', DueSoon: 'Due Soon', Overdue: 'Overdue',
+}
+
+const todayStr = new Date().toISOString().split('T')[0]
+
 function FleetTab() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
@@ -820,17 +848,47 @@ function FleetTab() {
   const [form, setForm] = useState<VehiclePayload>(emptyVehicle)
   const [selectedMakeId, setSelectedMakeId] = useState('')
 
+  // Import modals
+  const [showVehicleImport, setShowVehicleImport] = useState(false)
+  const [showMileageImport, setShowMileageImport] = useState(false)
+
+  // Mileage state
+  const [logTarget, setLogTarget] = useState<VehicleRow | null>(null)
+  const [logForm, setLogForm] = useState({ readingKm: '', readingDate: todayStr, notes: '' })
+  const [serviceTarget, setServiceTarget] = useState<VehicleRow | null>(null)
+
   const { data: vehicles = [], isLoading } = useQuery({ queryKey: ['vehicles', search], queryFn: () => getVehicles(search || undefined) })
+  const { data: serviceStatuses = [] } = useQuery({ queryKey: ['fleet-service-status'], queryFn: getFleetServiceStatus })
   const { data: vehicleTypes = [] } = useQuery({ queryKey: ['vehicle-types'], queryFn: () => getVehicleTypes(true), enabled: showForm })
   const { data: makes = [] } = useQuery({ queryKey: ['vehicle-makes'], queryFn: () => getVehicleMakes(true), enabled: showForm })
   const { data: models = [] } = useQuery({ queryKey: ['vehicle-models', selectedMakeId], queryFn: () => getVehicleModels(selectedMakeId, true), enabled: showForm && !!selectedMakeId })
 
+  const statusByVehicle = React.useMemo(() =>
+    Object.fromEntries(serviceStatuses.map(s => [s.vehicleId, s])),
+    [serviceStatuses])
+
   const invalidate = () => qc.invalidateQueries({ queryKey: ['vehicles'] })
+  const invalidateFleet = () => qc.invalidateQueries({ queryKey: ['fleet-service-status'] })
+
   const save = useMutation({
     mutationFn: () => editing ? updateVehicle(editing.id, form) : createVehicle(form).then(() => undefined),
     onSuccess: () => { invalidate(); closeForm() },
   })
   const toggle = useMutation({ mutationFn: (id: string) => toggleVehicle(id), onSuccess: invalidate })
+
+  const logReading = useMutation({
+    mutationFn: () => logOdometerReading(logTarget!.id, {
+      readingKm: parseInt(logForm.readingKm, 10),
+      readingDate: logForm.readingDate,
+      notes: logForm.notes || null,
+    }),
+    onSuccess: () => { invalidateFleet(); setLogTarget(null); setLogForm({ readingKm: '', readingDate: todayStr, notes: '' }) },
+  })
+
+  const doRecordService = useMutation({
+    mutationFn: () => recordService(serviceTarget!.id),
+    onSuccess: () => { invalidateFleet(); setServiceTarget(null) },
+  })
 
   const openCreate = () => { setEditing(null); setForm(emptyVehicle); setSelectedMakeId(''); setShowForm(true) }
   const openEdit = (v: VehicleRow) => {
@@ -846,45 +904,141 @@ function FleetTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <input placeholder="Search fleet…" value={search} onChange={e => setSearch(e.target.value)} className={`${inputCls} max-w-sm`} />
-        <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shrink-0">+ Add Vehicle</button>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={() => setShowMileageImport(true)}
+            className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+            ↑ Import Mileage
+          </button>
+          <button onClick={() => setShowVehicleImport(true)}
+            className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+            ↑ Import
+          </button>
+          <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Add Vehicle</button>
+        </div>
       </div>
+      {showVehicleImport && <VehicleImportModal onClose={() => setShowVehicleImport(false)} />}
+      {showMileageImport && <MileageImportModal onClose={() => setShowMileageImport(false)} />}
 
       <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-            <tr>{['Registration', 'Make / Model', 'Type', 'Capacity', 'Status', ''].map(h =>
+            <tr>{['Registration', 'Make / Model', 'Type', 'Capacity', 'Odometer', 'Service', 'Status', ''].map(h =>
               <th key={h} className="text-left px-4 py-3 font-medium whitespace-nowrap">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {isLoading && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Loading…</td></tr>}
-            {!isLoading && vehicles.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">No vehicles yet</td></tr>}
-            {vehicles.map(v => (
-              <tr key={v.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${!v.isActive ? 'opacity-50' : ''}`}>
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">{v.registration}</td>
-                <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{v.make} {v.model}</td>
-                <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">{v.vehicleType}</span></td>
-                <td className="px-4 py-3 text-gray-500">{v.capacity} pax</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${v.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500'}`}>
-                    {v.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex gap-3 justify-end">
-                    <button onClick={() => openEdit(v)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                    <button onClick={() => toggle.mutate(v.id)} disabled={toggle.isPending}
-                      className={`text-xs hover:underline ${v.isActive ? 'text-red-500' : 'text-green-600'}`}>
-                      {v.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {isLoading && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">Loading…</td></tr>}
+            {!isLoading && vehicles.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">No vehicles yet</td></tr>}
+            {vehicles.map(v => {
+              const fleet: VehicleServiceStatus | undefined = statusByVehicle[v.id]
+              return (
+                <tr key={v.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${!v.isActive ? 'opacity-50' : ''}`}>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">{v.registration}</td>
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{v.make} {v.model}</td>
+                  <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">{v.vehicleType}</span></td>
+                  <td className="px-4 py-3 text-gray-500">{v.capacity} pax</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">
+                    {fleet ? `${fleet.currentOdometer.toLocaleString()} km` : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {fleet ? (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SERVICE_STATUS_STYLES[fleet.status]}`}>
+                        {SERVICE_STATUS_LABEL[fleet.status]}
+                      </span>
+                    ) : <span className="text-gray-300 dark:text-gray-600 text-xs">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${v.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-500'}`}>
+                      {v.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex gap-3 justify-end items-center">
+                      <button onClick={() => { setLogTarget(v); setLogForm({ readingKm: '', readingDate: todayStr, notes: '' }) }}
+                        className="text-xs text-blue-600 hover:underline">Log km</button>
+                      {fleet && fleet.status !== 'Ok' && (
+                        <button onClick={() => setServiceTarget(v)} className="text-xs text-amber-600 hover:underline">Service done</button>
+                      )}
+                      <button onClick={() => openEdit(v)} className="text-xs text-blue-600 hover:underline">Edit</button>
+                      <button onClick={() => toggle.mutate(v.id)} disabled={toggle.isPending}
+                        className={`text-xs hover:underline ${v.isActive ? 'text-red-500' : 'text-green-600'}`}>
+                        {v.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
         <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-400">{vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''}</div>
       </div>
+
+      {/* Log Reading Modal */}
+      {logTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Log Odometer Reading</h3>
+            <p className="text-sm text-gray-500">{logTarget.registration} — {logTarget.make} {logTarget.model}</p>
+            <div className="space-y-3">
+              <div>
+                <label className={labelCls}>Current Reading (km) *</label>
+                <input type="number" min={1} value={logForm.readingKm}
+                  onChange={e => setLogForm(f => ({ ...f, readingKm: e.target.value }))}
+                  placeholder="e.g. 45200" className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Date *</label>
+                <input type="date" value={logForm.readingDate}
+                  onChange={e => setLogForm(f => ({ ...f, readingDate: e.target.value }))}
+                  className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Notes (optional)</label>
+                <input value={logForm.notes}
+                  onChange={e => setLogForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="e.g. End of Kruger run" className={inputCls} />
+              </div>
+            </div>
+            {logReading.isError && <p className="text-sm text-red-500">{String(logReading.error)}</p>}
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => logReading.mutate()}
+                disabled={logReading.isPending || !logForm.readingKm || !logForm.readingDate}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {logReading.isPending ? 'Saving…' : 'Save Reading'}
+              </button>
+              <button onClick={() => setLogTarget(null)}
+                className="flex-1 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Record Service Confirmation */}
+      {serviceTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Record Service</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Confirm that <span className="font-medium text-gray-900 dark:text-gray-100">{serviceTarget.registration}</span> has been serviced.
+              The current odometer reading will be saved as the new service baseline.
+            </p>
+            {doRecordService.isError && <p className="text-sm text-red-500">{String(doRecordService.error)}</p>}
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => doRecordService.mutate()} disabled={doRecordService.isPending}
+                className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                {doRecordService.isPending ? 'Saving…' : 'Confirm Service'}
+              </button>
+              <button onClick={() => setServiceTarget(null)}
+                className="flex-1 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -954,6 +1108,7 @@ const emptyDriver: DriverPayload = { fullName: '', licenseNumber: '', phone: nul
 function DriversTab() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
+  const [showImport, setShowImport] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<DriverRow | null>(null)
   const [form, setForm] = useState<DriverPayload>(emptyDriver)
@@ -979,8 +1134,15 @@ function DriversTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <input placeholder="Search drivers…" value={search} onChange={e => setSearch(e.target.value)} className={`${inputCls} max-w-sm`} />
-        <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shrink-0">+ Add Driver</button>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={() => setShowImport(true)}
+            className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+            ↑ Import
+          </button>
+          <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Add Driver</button>
+        </div>
       </div>
+      {showImport && <DriverImportModal onClose={() => setShowImport(false)} />}
 
       <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-x-auto">
         <table className="w-full text-sm">

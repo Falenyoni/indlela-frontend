@@ -26,7 +26,10 @@ export async function getLocations(search?: string, type?: string, region?: stri
 
 export async function createLocation(data: LocationPayload): Promise<void> {
   const res = await apiFetch('/api/locations', { method: 'POST', body: JSON.stringify(data) })
-  if (!res.ok) throw new Error('Failed to create location')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string; message?: string }
+    throw new Error(err.detail ?? err.message ?? 'Failed to create location')
+  }
 }
 
 export async function updateLocation(id: string, data: LocationPayload): Promise<void> {

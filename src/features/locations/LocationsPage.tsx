@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getLocations, createLocation, updateLocation, toggleLocation, LOCATION_TYPES, type LocationRow, type LocationPayload } from './locationsApi'
+import { LocationImportModal } from './LocationImportModal'
 
 const TYPE_COLORS: Record<string, string> = {
   Airport: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
@@ -19,6 +20,7 @@ export function LocationsPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [showImport, setShowImport] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<LocationRow | null>(null)
   const [form, setForm] = useState<LocationPayload>(emptyForm)
@@ -64,10 +66,17 @@ export function LocationsPage() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Locations</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Hotels, lodges, airports and pickup points</p>
         </div>
-        <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          + Add Location
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)}
+            className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+            ↑ Import
+          </button>
+          <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            + Add Location
+          </button>
+        </div>
       </div>
+      {showImport && <LocationImportModal onClose={() => setShowImport(false)} />}
 
       <div className="flex gap-3 flex-wrap">
         <input placeholder="Search locations…" value={search} onChange={e => setSearch(e.target.value)}

@@ -4,6 +4,9 @@ import { getReservations, type BookingRow } from '../reservations/reservationsAp
 import { getGuests } from '../guests/guestsApi'
 import { getProperties } from '../properties/propertiesApi'
 import { getActivities } from '../activities/activitiesApi'
+import { FleetReportTab } from './FleetReportTab'
+
+type ReportTab = 'bookings' | 'fleet'
 
 const STATUSES = ['', 'Enquiry', 'Quoted', 'Confirmed', 'InProgress', 'Completed', 'Cancelled']
 
@@ -67,6 +70,7 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 }
 
 export function ReportingPage() {
+  const [activeTab, setActiveTab] = useState<ReportTab>('bookings')
   const [statusFilter, setStatusFilter] = useState('')
   const [datePeriod,   setDatePeriod]   = useState<DatePeriod>('')
   const [customFrom,   setCustomFrom]   = useState('')
@@ -116,13 +120,33 @@ export function ReportingPage() {
 
   const fmt = (n: number) => n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+  const tabCls = (t: ReportTab) =>
+    `px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+      activeTab === t
+        ? 'bg-blue-600 text-white'
+        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+    }`
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Reporting</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Operational snapshot across bookings, properties and activities</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Reporting</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {activeTab === 'bookings'
+              ? 'Operational snapshot across bookings, properties and activities'
+              : 'Fleet mileage, service status and estimated fuel costs'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <button onClick={() => setActiveTab('bookings')} className={tabCls('bookings')}>Bookings</button>
+          <button onClick={() => setActiveTab('fleet')}    className={tabCls('fleet')}>Fleet</button>
+        </div>
       </div>
 
+      {activeTab === 'fleet' && <FleetReportTab />}
+
+      {activeTab === 'bookings' && <>
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectCls}>
@@ -273,6 +297,7 @@ export function ReportingPage() {
           }
         </div>
       </div>
+      </>}
     </div>
   )
 }

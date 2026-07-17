@@ -22,7 +22,10 @@ export async function getVehicles(search?: string): Promise<VehicleRow[]> {
 
 export async function createVehicle(data: VehiclePayload): Promise<string> {
   const res = await apiFetch('/api/vehicles', { method: 'POST', body: JSON.stringify(data) })
-  if (!res.ok) throw new Error('Failed to create vehicle')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string; message?: string }
+    throw new Error(err.detail ?? err.message ?? 'Failed to create vehicle')
+  }
   return res.json()
 }
 
@@ -63,7 +66,10 @@ export async function getDrivers(search?: string): Promise<DriverRow[]> {
 
 export async function createDriver(data: DriverPayload): Promise<string> {
   const res = await apiFetch('/api/drivers', { method: 'POST', body: JSON.stringify(data) })
-  if (!res.ok) throw new Error('Failed to create driver')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string; message?: string }
+    throw new Error(err.detail ?? err.message ?? 'Failed to create driver')
+  }
   return res.json()
 }
 
